@@ -18,13 +18,24 @@ function verifyPassword(password: string, hash: string): boolean {
 }
 
 // Create connection pool
-const pool = process.env.DATABASE_URL
+const dbUrl = process.env.DATABASE_URL;
+console.log('[DATABASE] Initializing pool, DATABASE_URL exists:', !!dbUrl);
+
+const pool = dbUrl
   ? new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
+      connectionString: dbUrl,
+      ssl: {
+        rejectUnauthorized: false,
+      },
       max: 10,
+      connectionTimeoutMillis: 10000,
+      idleTimeoutMillis: 30000,
     })
   : null;
+
+if (!pool) {
+  console.error('[DATABASE] Pool is null - DATABASE_URL not set!');
+}
 
 /**
  * Initialize all database tables
@@ -144,10 +155,17 @@ export async function saveArticle(topic: DailyTopic): Promise<boolean> {
  * Update an existing article (for rewrites)
  */
 export async function updateArticle(topic: DailyTopic, userId?: number): Promise<boolean> {
-  if (!pool) return false;
+  console.log('[DATABASE] updateArticle called for date:', topic.date);
+  console.log('[DATABASE] Pool exists:', !!pool);
+  
+  if (!pool) {
+    console.error('[DATABASE] Cannot update article - pool is null! DATABASE_URL:', !!process.env.DATABASE_URL);
+    return false;
+  }
 
   try {
-    await pool.query(
+    console.log('[DATABASE] Executing UPDATE query...');
+    const result = await pool.query(
       `UPDATE daily_articles SET
         content = $2,
         reading_time = $3,
@@ -166,9 +184,12 @@ export async function updateArticle(topic: DailyTopic, userId?: number): Promise
         JSON.stringify(topic.dailyPractice || []),
       ]
     );
+    
+    console.log('[DATABASE] UPDATE result rowCount:', result.rowCount);
 
     // Track who rewrote it
     if (userId) {
+      console.log('[DATABASE] Tracking rewrite by user:', userId);
       await pool.query(
         `INSERT INTO article_rewrites (article_date, rewritten_by_user_id)
          VALUES ($1, $2)
@@ -179,10 +200,10 @@ export async function updateArticle(topic: DailyTopic, userId?: number): Promise
       );
     }
 
-    console.log(`Article updated in database for date: ${topic.date}`);
+    console.log(`[DATABASE] Article updated successfully for date: ${topic.date}`);
     return true;
   } catch (error) {
-    console.error('Error updating article:', error);
+    console.error('[DATABASE] Error updating article:', error);
     return false;
   }
 }

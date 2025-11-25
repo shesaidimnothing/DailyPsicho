@@ -1,6 +1,7 @@
 import { getAllTopics } from '@/lib/supabase';
 import Navigation from '@/components/Navigation';
 import ArchiveItem from '@/components/ArchiveItem';
+import GreekOrnament from '@/components/GreekOrnament';
 import { Metadata } from 'next';
 
 export const revalidate = 3600; // Revalidate every hour for archive
@@ -14,16 +15,21 @@ export default async function Archive() {
   const topics = await getAllTopics();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <Navigation />
       <main className="max-w-4xl mx-auto px-6 py-12 md:py-16">
-        <h1 className="font-title text-4xl md:text-5xl font-bold mb-12" data-translate>
+        <GreekOrnament type="header" />
+        
+        <h1 className="font-title text-4xl md:text-5xl font-bold mb-4 text-center" data-translate>
           Archive
         </h1>
+        <p className="text-center text-[var(--text-muted)] mb-12 font-heading text-sm tracking-widest uppercase">
+          Scrolls of Wisdom Past
+        </p>
 
         {topics.length === 0 ? (
           <div className="text-center py-16">
-            <p className="text-foreground/70">No topics found in archive.</p>
+            <p className="text-[var(--text-muted)]">No topics found in archive.</p>
           </div>
         ) : (
           <div className="space-y-8">
@@ -32,8 +38,9 @@ export default async function Archive() {
             ))}
           </div>
         )}
+        
+        <GreekOrnament type="footer" />
       </main>
     </div>
   );
 }
-

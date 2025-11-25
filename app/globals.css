@@ -1,23 +1,37 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #000000;
-  --accent: #1a1a1a;
-  --border: #e5e5e5;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-accent: var(--accent);
-  --color-border: var(--border);
   --font-family-heading: var(--font-cinzel), serif;
   --font-family-title: var(--font-playfair), serif;
   --font-family-body: var(--font-crimson), serif;
 }
 
-/* Custom font utility classes for Tailwind */
+/* CSS Variables for theming */
+:root {
+  --bg-primary: #faf9f6;
+  --bg-secondary: #f0ebe3;
+  --bg-accent: #e8e0d5;
+  --text-primary: #1a1a1a;
+  --text-secondary: #4a4a4a;
+  --text-muted: #7a7a7a;
+  --border-color: #d4c5b5;
+  --gold-accent: #c9a962;
+  --gold-dark: #a8893d;
+}
+
+[data-theme="dark"] {
+  --bg-primary: #0d0d0d;
+  --bg-secondary: #1a1a1a;
+  --bg-accent: #252525;
+  --text-primary: #f5f5f0;
+  --text-secondary: #c9c9c4;
+  --text-muted: #8a8a85;
+  --border-color: #3a3a35;
+  --gold-accent: #d4b872;
+  --gold-dark: #c9a962;
+}
+
+/* Custom font utility classes */
 .font-heading {
   font-family: var(--font-cinzel), serif;
 }
@@ -30,40 +44,350 @@
   font-family: var(--font-crimson), serif;
 }
 
+/* Base styles */
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg-primary);
+  color: var(--text-primary);
   font-family: var(--font-crimson), serif;
   line-height: 1.8;
+  transition: background-color 0.4s ease, color 0.4s ease;
+  min-height: 100vh;
 }
 
-/* Greek-inspired decorative elements */
-.greek-border {
-  border-top: 2px solid var(--foreground);
-  border-bottom: 2px solid var(--foreground);
-  position: relative;
-}
-
-.greek-border::before,
-.greek-border::after {
+/* Greek pattern background */
+body::before {
   content: '';
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 40px;
-  height: 2px;
-  background: var(--foreground);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    linear-gradient(90deg, var(--border-color) 1px, transparent 1px),
+    linear-gradient(var(--border-color) 1px, transparent 1px);
+  background-size: 80px 80px;
+  opacity: 0.03;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Greek meander/key pattern border */
+.greek-border {
+  position: relative;
+  border-top: 2px solid var(--gold-accent);
+  border-bottom: 2px solid var(--gold-accent);
 }
 
 .greek-border::before {
-  top: -8px;
+  content: '☆';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--gold-accent);
+  font-size: 8px;
 }
 
-.greek-border::after {
-  bottom: -8px;
+/* Greek column decorations */
+.greek-column {
+  position: relative;
 }
 
-/* Smooth scroll */
-html {
-  scroll-behavior: smooth;
+.greek-column::before,
+.greek-column::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(
+    to bottom,
+    var(--gold-accent) 0%,
+    var(--gold-dark) 10%,
+    var(--gold-accent) 20%,
+    var(--gold-dark) 30%,
+    var(--gold-accent) 40%,
+    var(--gold-dark) 50%,
+    var(--gold-accent) 60%,
+    var(--gold-dark) 70%,
+    var(--gold-accent) 80%,
+    var(--gold-dark) 90%,
+    var(--gold-accent) 100%
+  );
+  opacity: 0.4;
+}
+
+.greek-column::before {
+  left: 0;
+}
+
+.greek-column::after {
+  right: 0;
+}
+
+/* Greek laurel wreath divider */
+.greek-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin: 2rem 0;
+  color: var(--gold-accent);
+}
+
+.greek-divider::before,
+.greek-divider::after {
+  content: '❧';
+  font-size: 1.5rem;
+}
+
+.greek-divider::after {
+  transform: scaleX(-1);
+}
+
+/* Decorative Greek corners */
+.greek-corner {
+  position: relative;
+}
+
+.greek-corner::before,
+.greek-corner::after {
+  content: '⌜';
+  position: absolute;
+  font-size: 2rem;
+  color: var(--gold-accent);
+  opacity: 0.6;
+  font-weight: 100;
+}
+
+.greek-corner::before {
+  top: -0.5rem;
+  left: -0.5rem;
+}
+
+.greek-corner::after {
+  content: '⌟';
+  bottom: -0.5rem;
+  right: -0.5rem;
+}
+
+/* Navigation styling */
+nav {
+  background: var(--bg-secondary);
+  border-bottom: 3px solid var(--gold-accent) !important;
+  position: relative;
+}
+
+nav::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--gold-dark);
+}
+
+/* Card/Section styling */
+.bg-foreground\/5 {
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border-color) !important;
+  position: relative;
+}
+
+.bg-foreground\/10 {
+  background-color: var(--bg-accent) !important;
+}
+
+/* Text colors */
+.text-foreground\/60 {
+  color: var(--text-muted) !important;
+}
+
+.text-foreground\/70 {
+  color: var(--text-secondary) !important;
+}
+
+/* Border colors */
+.border-foreground\/10 {
+  border-color: var(--border-color) !important;
+}
+
+.border-foreground\/20 {
+  border-color: var(--border-color) !important;
+}
+
+/* Button styling */
+.bg-foreground {
+  background-color: var(--text-primary) !important;
+}
+
+.text-background {
+  color: var(--bg-primary) !important;
+}
+
+/* Links and interactive elements */
+a {
+  transition: color 0.2s ease;
+}
+
+/* Countdown timer styling */
+.bg-foreground.text-background {
+  background: linear-gradient(135deg, var(--gold-accent), var(--gold-dark)) !important;
+  color: #000 !important;
+  font-weight: 600;
+}
+
+/* Article content */
+article {
+  position: relative;
+}
+
+/* Section headers with Greek styling */
+article h2 {
+  position: relative;
+  display: inline-block;
+}
+
+article h2::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--gold-accent), transparent);
+}
+
+/* Blockquote styling */
+blockquote {
+  border-left: 4px solid var(--gold-accent);
+  padding-left: 1.5rem;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+/* Selection color */
+::selection {
+  background: var(--gold-accent);
+  color: #000;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gold-accent);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gold-dark);
+}
+
+/* Greek pillar sidebar effect for main content */
+main {
+  position: relative;
+}
+
+@media (min-width: 1024px) {
+  main::before,
+  main::after {
+    content: '';
+    position: fixed;
+    top: 100px;
+    bottom: 100px;
+    width: 40px;
+    background: 
+      linear-gradient(to right, transparent, var(--bg-secondary) 20%, var(--bg-accent) 50%, var(--bg-secondary) 80%, transparent),
+      repeating-linear-gradient(
+        to bottom,
+        var(--gold-accent) 0px,
+        var(--gold-accent) 2px,
+        transparent 2px,
+        transparent 20px
+      );
+    opacity: 0.3;
+    pointer-events: none;
+  }
+
+  main::before {
+    left: 20px;
+    border-left: 3px solid var(--gold-accent);
+    border-right: 1px solid var(--gold-dark);
+  }
+
+  main::after {
+    right: 20px;
+    border-right: 3px solid var(--gold-accent);
+    border-left: 1px solid var(--gold-dark);
+  }
+}
+
+/* Greek ornament for page top */
+.page-ornament {
+  text-align: center;
+  color: var(--gold-accent);
+  font-size: 1.5rem;
+  letter-spacing: 0.5rem;
+  margin-bottom: 2rem;
+}
+
+/* Error styling */
+.bg-red-50 {
+  background-color: rgba(185, 28, 28, 0.1) !important;
+}
+
+[data-theme="dark"] .bg-red-50 {
+  background-color: rgba(185, 28, 28, 0.2) !important;
+}
+
+.border-red-200 {
+  border-color: rgba(185, 28, 28, 0.3) !important;
+}
+
+.text-red-800 {
+  color: #dc2626 !important;
+}
+
+[data-theme="dark"] .text-red-800 {
+  color: #f87171 !important;
+}
+
+.bg-red-100 {
+  background-color: rgba(185, 28, 28, 0.15) !important;
+}
+
+/* Modal backdrop */
+.bg-black\/50 {
+  background-color: rgba(0, 0, 0, 0.7) !important;
+}
+
+/* Input styling */
+input {
+  background: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+}
+
+input:focus {
+  border-color: var(--gold-accent) !important;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(201, 169, 98, 0.2);
+}
+
+/* Archive item hover effect */
+article:hover {
+  background: var(--bg-secondary);
+  transition: background 0.3s ease;
 }

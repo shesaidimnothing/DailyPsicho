@@ -1,6 +1,7 @@
 import { getLatestTopic } from '@/lib/supabase';
 import TopicContent from '@/components/TopicContent';
 import Navigation from '@/components/Navigation';
+import GreekOrnament from '@/components/GreekOrnament';
 import { Metadata } from 'next';
 
 // Configure ISR (Incremental Static Regeneration) for daily updates
@@ -17,12 +18,13 @@ export default async function Home() {
 
   if (!topic) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen">
         <Navigation />
         <main className="max-w-4xl mx-auto px-6 py-16">
+          <GreekOrnament type="header" />
           <div className="text-center">
             <h1 className="font-title text-3xl mb-4">No topic available</h1>
-            <p className="text-foreground/70">
+            <p className="text-[var(--text-muted)]">
               Please check your CMS configuration or try again later.
             </p>
           </div>
@@ -32,10 +34,12 @@ export default async function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <Navigation />
       <main className="max-w-4xl mx-auto px-6 py-12 md:py-16">
+        <GreekOrnament type="header" />
         <TopicContent topic={topic} showCountdown />
+        <GreekOrnament type="footer" />
       </main>
     </div>
   );
