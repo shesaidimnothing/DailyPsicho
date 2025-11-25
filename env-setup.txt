@@ -1,0 +1,36 @@
+# ===========================================
+# Daily Psicho - Environment Variables Setup
+# ===========================================
+
+## Step 1: Get your FREE Groq API Key
+
+1. Go to https://console.groq.com
+2. Create a free account (or sign in with Google/GitHub)
+3. Click "API Keys" in the sidebar
+4. Click "Create API Key"
+5. Copy the key (starts with "gsk_")
+
+## Step 2: Create .env.local file
+
+Create a file called ".env.local" in your project root with:
+
+GROQ_API_KEY=gsk_your_api_key_here
+
+## Step 3: Deploy to Vercel
+
+When deploying to Vercel:
+1. Go to your project settings
+2. Click "Environment Variables"
+3. Add: GROQ_API_KEY = your_key_here
+
+## That's it!
+
+The site will now:
+- Fetch a new article from ScienceDaily every day
+- Use Groq AI to generate a unique 10-15 minute educational article
+- All for FREE (Groq free tier = 14,400 requests/day)
+
+## Groq Free Tier Limits:
+- 14,400 requests per day
+- 30 requests per minute
+- You only need 1 request per day!

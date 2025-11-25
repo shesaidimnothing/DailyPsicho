@@ -2,25 +2,68 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #000000;
+  --accent: #1a1a1a;
+  --border: #e5e5e5;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
+  --font-family-heading: var(--font-cinzel), serif;
+  --font-family-title: var(--font-playfair), serif;
+  --font-family-body: var(--font-crimson), serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Custom font utility classes for Tailwind */
+.font-heading {
+  font-family: var(--font-cinzel), serif;
+}
+
+.font-title {
+  font-family: var(--font-playfair), serif;
+}
+
+.font-body {
+  font-family: var(--font-crimson), serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-crimson), serif;
+  line-height: 1.8;
+}
+
+/* Greek-inspired decorative elements */
+.greek-border {
+  border-top: 2px solid var(--foreground);
+  border-bottom: 2px solid var(--foreground);
+  position: relative;
+}
+
+.greek-border::before,
+.greek-border::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 2px;
+  background: var(--foreground);
+}
+
+.greek-border::before {
+  top: -8px;
+}
+
+.greek-border::after {
+  bottom: -8px;
+}
+
+/* Smooth scroll */
+html {
+  scroll-behavior: smooth;
 }
