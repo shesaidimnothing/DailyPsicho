@@ -15,6 +15,27 @@ interface GroqResponse {
       content: string;
     };
   }[];
+  error?: {
+    message: string;
+    type: string;
+    code?: string;
+  };
+}
+
+interface GroqError {
+  error: {
+    message: string;
+    type: string;
+    code?: string;
+  };
+}
+
+export interface GenerationResult {
+  success: boolean;
+  content?: string;
+  error?: string;
+  errorCode?: string;
+  errorType?: string;
 }
 
 /**
@@ -24,13 +45,21 @@ export async function generateWithGroq(
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number = 8000
-): Promise<string | null> {
+): Promise<GenerationResult> {
   const apiKey = process.env.GROQ_API_KEY;
 
   if (!apiKey) {
-    console.error('GROQ_API_KEY not found in environment variables');
-    return null;
+    console.error('[GROQ] API key not found in environment variables');
+    return {
+      success: false,
+      error: 'Groq API key is not configured. Please add GROQ_API_KEY to your environment variables.',
+      errorCode: 'NO_API_KEY',
+    };
   }
+
+  console.log('[GROQ] Starting generation request...');
+  console.log('[GROQ] Model: llama-3.3-70b-versatile');
+  console.log('[GROQ] Max tokens:', maxTokens);
 
   try {
     const messages: GroqMessage[] = [
@@ -38,6 +67,8 @@ export async function generateWithGroq(
       { role: 'user', content: userPrompt },
     ];
 
+    const startTime = Date.now();
+    
     const response = await fetch(GROQ_API_URL, {
       method: 'POST',
       headers: {
@@ -45,26 +76,143 @@ export async function generateWithGroq(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile', // Latest free model for long-form writing
+        model: 'llama-3.3-70b-versatile',
         messages,
         temperature: 0.7,
-        max_tokens: maxTokens, // Increased for longer articles
+        max_tokens: maxTokens,
         top_p: 0.9,
       }),
     });
 
+    const elapsed = Date.now() - startTime;
+    console.log(`[GROQ] Response received in ${elapsed}ms, status: ${response.status}`);
+
     if (!response.ok) {
-      const error = await response.text();
-      console.error('Groq API error:', response.status, error);
-      return null;
+      const errorText = await response.text();
+      console.error('[GROQ] API error response:', errorText);
+      
+      let errorData: GroqError | null = null;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        // Not JSON, use raw text
+      }
+
+      const errorMessage = errorData?.error?.message || errorText;
+      const errorType = errorData?.error?.type || 'unknown';
+      const errorCode = errorData?.error?.code || response.status.toString();
+
+      // Provide user-friendly error messages
+      let userMessage = `Groq API error: ${errorMessage}`;
+      
+      if (response.status === 429) {
+        userMessage = 'Rate limit exceeded. The free Groq tier has limits on requests per minute and per day. Please wait a few minutes and try again.';
+      } else if (response.status === 401) {
+        userMessage = 'Invalid API key. Please check your GROQ_API_KEY is correct.';
+      } else if (response.status === 503) {
+        userMessage = 'Groq service is temporarily unavailable. Please try again in a few minutes.';
+      } else if (response.status === 500) {
+        userMessage = 'Groq server error. The AI service is having issues. Please try again later.';
+      }
+
+      return {
+        success: false,
+        error: userMessage,
+        errorCode,
+        errorType,
+      };
     }
 
     const data: GroqResponse = await response.json();
-    return data.choices[0]?.message?.content || null;
+    
+    if (!data.choices || data.choices.length === 0) {
+      console.error('[GROQ] No choices in response:', JSON.stringify(data).substring(0, 500));
+      return {
+        success: false,
+        error: 'Groq returned an empty response. The AI may be overloaded. Please try again.',
+        errorCode: 'EMPTY_RESPONSE',
+      };
+    }
+
+    const content = data.choices[0]?.message?.content;
+    
+    if (!content) {
+      console.error('[GROQ] No content in response choice');
+      return {
+        success: false,
+        error: 'Groq returned no content. Please try again.',
+        errorCode: 'NO_CONTENT',
+      };
+    }
+
+    console.log(`[GROQ] Successfully generated ${content.length} characters`);
+    
+    return {
+      success: true,
+      content,
+    };
   } catch (error) {
-    console.error('Error calling Groq API:', error);
-    return null;
+    console.error('[GROQ] Exception during API call:', error);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Check for network errors
+    if (errorMessage.includes('fetch') || errorMessage.includes('network') || errorMessage.includes('ECONNREFUSED')) {
+      return {
+        success: false,
+        error: 'Network error connecting to Groq. Please check your internet connection.',
+        errorCode: 'NETWORK_ERROR',
+      };
+    }
+    
+    return {
+      success: false,
+      error: `Failed to connect to Groq AI: ${errorMessage}`,
+      errorCode: 'EXCEPTION',
+    };
   }
+}
+
+/**
+ * Format the article content for proper display
+ * Ensures proper paragraph breaks and spacing
+ */
+function formatArticleContent(content: string): string {
+  let formatted = content;
+
+  // Ensure section headers have proper spacing
+  formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '\n\n**$1**\n\n');
+
+  // Convert single newlines to double for paragraph breaks
+  formatted = formatted.replace(/([^\n])\n([^\n])/g, '$1\n\n$2');
+
+  // Ensure there's space after periods that start new sentences
+  formatted = formatted.replace(/\.([A-Z])/g, '.\n\n$1');
+
+  // Clean up excessive newlines (more than 3)
+  formatted = formatted.replace(/\n{4,}/g, '\n\n\n');
+
+  // Ensure the article starts clean
+  formatted = formatted.trim();
+
+  // Make sure each paragraph is properly separated
+  const paragraphs = formatted.split(/\n\n+/);
+  formatted = paragraphs
+    .map(p => p.trim())
+    .filter(p => p.length > 0)
+    .join('\n\n');
+
+  return formatted;
+}
+
+export interface ArticleGenerationResult {
+  success: boolean;
+  content?: string;
+  keyInsights?: string[];
+  keyConcepts?: { term: string; detail: string }[];
+  dailyPractice?: string[];
+  error?: string;
+  errorCode?: string;
 }
 
 /**
@@ -75,175 +223,136 @@ export async function generatePsychologyArticle(
   title: string,
   summary: string,
   sourceUrl: string
-): Promise<{
-  content: string;
-  keyInsights: string[];
-  keyConcepts: { term: string; detail: string }[];
-  dailyPractice: string[];
-} | null> {
-  const systemPrompt = `You are an expert psychology and neuroscience educator who writes engaging, comprehensive educational articles. Your writing style is:
+): Promise<ArticleGenerationResult> {
+  console.log('[GROQ] Generating article for:', title);
+  console.log('[GROQ] Summary length:', summary.length, 'characters');
+
+  const systemPrompt = `You are an expert psychology and neuroscience educator who writes engaging, comprehensive educational articles.
+
+Your writing style:
 - Clear and accessible to general audiences
-- Scientifically accurate but not overly technical
+- Scientifically accurate but not overly technical  
 - Engaging with real-world examples, analogies, and stories
 - Well-structured with clear sections
-- IMPORTANT: Write between 2800-3500 words (this is crucial - aim for a 12-15 minute read)
-- Rich with explanations, examples, and practical insights
+- IMPORTANT: Write 2800-3500 words (12-15 minute read)
 
-You always write original educational content that explains concepts deeply and thoroughly. Never rush through topics - take time to explain each concept fully with examples.`;
+FORMATTING RULES (CRITICAL):
+- Start each new paragraph on a new line
+- Leave a blank line between paragraphs
+- Use **Section Title** for headers (with blank lines before and after)
+- Write in flowing paragraphs, not bullet points
+- Each paragraph should be 3-5 sentences
+- Never write wall-of-text - always use paragraph breaks`;
 
-  const userPrompt = `Write a COMPREHENSIVE and LENGTHY educational article based on this recent psychology research news. The article MUST be between 2800-3500 words (12-15 minute read). Do not write a short article.
+  const userPrompt = `Write a comprehensive educational article about this psychology research.
 
-**Title:** ${title}
+TITLE: ${title}
 
-**Research Summary:** ${summary}
+RESEARCH SUMMARY: ${summary}
 
-**Source:** ${sourceUrl}
+SOURCE: ${sourceUrl}
 
-Write the article with these sections (use **Section Title** format for headers). Each section should be substantial and detailed:
+Write the article with these sections. IMPORTANT: Put a blank line between every paragraph!
 
 **The Discovery**
-Start with the key finding in an engaging, narrative way. Set the scene. Why is this important? What problem does it address? Include context about why researchers were investigating this. (4-5 detailed paragraphs)
+
+Write 4-5 paragraphs introducing the key finding. Make it engaging and set the scene. Each paragraph should be separated by a blank line.
 
 **Understanding the Science**
-This is the heart of the article. Explain the underlying psychology/neuroscience concepts thoroughly:
-- What biological or psychological mechanisms are involved?
-- Use at least 2-3 analogies to make complex ideas accessible
-- Include examples from everyday life
-- Explain related concepts that help readers understand the full picture
-- Discuss how this connects to what we already knew
-(6-8 detailed paragraphs)
+
+Write 6-8 paragraphs explaining the psychology/neuroscience concepts. Use analogies and everyday examples. Separate each paragraph with a blank line.
 
 **The Research in Detail**
-Explain how scientists typically study this topic:
-- What methods do researchers use?
-- What makes this kind of research challenging?
-- What did this particular study find, and why is it significant?
-(3-4 paragraphs)
+
+Write 3-4 paragraphs about how scientists study this and what they found. Separate paragraphs with blank lines.
 
 **Why This Matters**
-Discuss the broader implications thoroughly:
-- How does this affect mental health understanding or treatment?
-- What are the implications for everyday life?
-- How might this change how we think about ourselves or others?
-- What are the societal implications?
-(4-5 paragraphs)
+
+Write 4-5 paragraphs on broader implications for mental health and daily life. Use blank lines between paragraphs.
 
 **The Bigger Picture**
-Place this in the broader context of psychology/neuroscience:
-- How does this fit with other research in the field?
-- What questions remain unanswered?
-- What might future research explore?
-- What are the limitations we should keep in mind?
-(3-4 paragraphs)
+
+Write 3-4 paragraphs placing this in context. What questions remain? Separate with blank lines.
 
 **Practical Applications**
-Give readers concrete, actionable takeaways:
-- What can people do with this knowledge?
-- How might this change daily habits or perspectives?
-- Include specific exercises or reflection prompts
-- Make it personal and applicable
-(4-5 paragraphs)
+
+Write 4-5 paragraphs with concrete takeaways readers can apply. Blank lines between paragraphs.
 
 **Final Thoughts**
-A thoughtful, memorable conclusion that:
-- Ties everything together
-- Leaves readers with something to think about
-- Connects back to the opening
-(2-3 paragraphs)
 
-End with: "---\\n\\n*This article was inspired by research reported on ScienceDaily. For the original research summary and sources, see the link below.*"
+Write 2-3 concluding paragraphs. Separate with blank lines.
 
-IMPORTANT: Write a FULL, COMPREHENSIVE article. Do not summarize or shorten. Each section should be thorough and detailed. Aim for 3000+ words total. The reader should feel they've learned something substantial.`;
+End with:
 
-  const content = await generateWithGroq(systemPrompt, userPrompt, 8000);
+---
 
-  if (!content) {
-    return null;
+*This article was inspired by research reported on ScienceDaily. For the original research summary and sources, see the link below.*
+
+REMEMBER: 
+- 2800-3500 words total
+- Blank line between EVERY paragraph
+- NO walls of text
+- Flowing, readable paragraphs`;
+
+  const result = await generateWithGroq(systemPrompt, userPrompt, 8000);
+
+  if (!result.success) {
+    console.error('[GROQ] Article generation failed:', result.error);
+    return {
+      success: false,
+      error: result.error,
+      errorCode: result.errorCode,
+    };
   }
 
-  // Generate key insights
-  const insightsPrompt = `Based on this article about "${title}", provide exactly 4 key takeaways as a JSON array of strings. Each should be one clear, memorable sentence that captures an important insight. Return ONLY the JSON array, no other text.
-
-Example format: ["First insight here.", "Second insight here.", "Third insight here.", "Fourth insight here."]`;
-
-  const insightsResponse = await generateWithGroq(
-    'You extract key insights from educational content. Return only valid JSON.',
-    insightsPrompt + '\n\nArticle:\n' + content.substring(0, 3000),
-    500
-  );
-
-  let keyInsights: string[] = [];
-  try {
-    if (insightsResponse) {
-      const parsed = JSON.parse(insightsResponse.trim());
-      if (Array.isArray(parsed)) {
-        keyInsights = parsed.slice(0, 4);
-      }
-    }
-  } catch {
-    keyInsights = [
-      'New research continues to expand our understanding of the mind.',
-      'Scientific discoveries often have practical applications for daily life.',
-      'Understanding psychology helps us make better decisions about our well-being.',
-      'See the original source for complete research details.',
-    ];
-  }
-
-  // Generate key concepts
-  const conceptsPrompt = `Based on this article about "${title}", provide exactly 4 key psychology/neuroscience terms and their definitions as a JSON array. Each definition should be 1-2 sentences. Format: [{"term": "Term Name", "detail": "Clear definition explaining the concept"}]. Return ONLY the JSON array.`;
-
-  const conceptsResponse = await generateWithGroq(
-    'You extract key concepts from educational content. Return only valid JSON.',
-    conceptsPrompt + '\n\nArticle:\n' + content.substring(0, 3000),
-    500
-  );
-
-  let keyConcepts: { term: string; detail: string }[] = [];
-  try {
-    if (conceptsResponse) {
-      const parsed = JSON.parse(conceptsResponse.trim());
-      if (Array.isArray(parsed)) {
-        keyConcepts = parsed.slice(0, 4);
-      }
-    }
-  } catch {
-    keyConcepts = [
-      { term: 'Neuroscience', detail: 'The scientific study of the nervous system and brain, exploring how neural activity creates thoughts, emotions, and behaviors.' },
-      { term: 'Psychology', detail: 'The scientific study of mind and behavior, examining how we think, feel, and act.' },
-      { term: 'Cognition', detail: 'The mental processes involved in gaining knowledge and understanding, including thinking, remembering, and problem-solving.' },
-    ];
-  }
-
-  // Generate daily practice
-  const practicePrompt = `Based on this article about "${title}", provide exactly 4 practical exercises or reflection prompts readers can try today. Each should be specific and actionable. Return as a JSON array of strings. Return ONLY the JSON array.`;
-
-  const practiceResponse = await generateWithGroq(
-    'You create practical exercises from educational content. Return only valid JSON.',
-    practicePrompt + '\n\nArticle:\n' + content.substring(0, 3000),
-    500
-  );
-
-  let dailyPractice: string[] = [];
-  try {
-    if (practiceResponse) {
-      const parsed = JSON.parse(practiceResponse.trim());
-      if (Array.isArray(parsed)) {
-        dailyPractice = parsed.slice(0, 4);
-      }
-    }
-  } catch {
-    dailyPractice = [
-      'Take 5 minutes to reflect on how today\'s topic relates to your own experiences.',
-      'Share one insight from this article with a friend or family member.',
-      'Write down one thing you learned that surprised you.',
-      'Consider one small change you could make based on this knowledge.',
-    ];
-  }
+  // Format the content for proper display
+  const formattedContent = formatArticleContent(result.content!);
+  console.log('[GROQ] Article formatted, final length:', formattedContent.length, 'characters');
 
   return {
-    content,
-    keyInsights,
-    keyConcepts,
-    dailyPractice,
+    success: true,
+    content: formattedContent,
+    keyInsights: getDefaultInsights(title),
+    keyConcepts: getDefaultConcepts(),
+    dailyPractice: getDefaultPractice(title),
   };
+}
+
+function getDefaultInsights(title: string): string[] {
+  return [
+    `This research on "${title}" reveals new insights about how our minds work.`,
+    'Scientific discoveries in psychology often have practical applications for daily life.',
+    'Understanding the brain helps us make better decisions about our mental well-being.',
+    'For complete research details and methodology, see the original source below.',
+  ];
+}
+
+function getDefaultConcepts(): { term: string; detail: string }[] {
+  return [
+    { 
+      term: 'Neuroscience', 
+      detail: 'The scientific study of the nervous system and brain, exploring how neural activity creates thoughts, emotions, and behaviors.' 
+    },
+    { 
+      term: 'Psychology', 
+      detail: 'The scientific study of mind and behavior, examining how we think, feel, and act in various situations.' 
+    },
+    { 
+      term: 'Cognition', 
+      detail: 'The mental processes involved in gaining knowledge and understanding, including thinking, remembering, and problem-solving.' 
+    },
+    {
+      term: 'Neuroplasticity',
+      detail: 'The brain\'s ability to reorganize itself by forming new neural connections throughout life, allowing adaptation and learning.'
+    },
+  ];
+}
+
+function getDefaultPractice(title: string): string[] {
+  return [
+    `Take 5 minutes to reflect on how "${title}" relates to your own experiences or observations.`,
+    'Share one insight from this article with a friend or family member today.',
+    'Write down one thing you learned that surprised you or changed your perspective.',
+    'Consider one small change you could make in your daily life based on this knowledge.',
+  ];
 }

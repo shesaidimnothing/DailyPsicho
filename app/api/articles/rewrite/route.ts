@@ -1,0 +1,200 @@
+import { NextResponse } from 'next/server';
+import { getCurrentUser } from '@/lib/auth';
+import { getArticleByDate, updateArticle } from '@/lib/database';
+import { generatePsychologyArticle } from '@/lib/groq';
+import { fetchPsychologyArticles } from '@/lib/sciencedaily';
+
+export async function POST(request: Request) {
+  const requestId = Math.random().toString(36).substring(7);
+  console.log(`[REWRITE ${requestId}] Starting rewrite request...`);
+
+  try {
+    // Step 1: Check authentication
+    console.log(`[REWRITE ${requestId}] Checking authentication...`);
+    const user = await getCurrentUser();
+    
+    if (!user) {
+      console.log(`[REWRITE ${requestId}] User not authenticated`);
+      return NextResponse.json(
+        { 
+          error: 'You must be logged in to rewrite articles',
+          errorCode: 'NOT_AUTHENTICATED',
+          debug: { step: 'authentication' }
+        },
+        { status: 401 }
+      );
+    }
+    console.log(`[REWRITE ${requestId}] User authenticated: ${user.email}`);
+
+    // Step 2: Parse request body
+    let body;
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      console.error(`[REWRITE ${requestId}] Failed to parse request body:`, parseError);
+      return NextResponse.json(
+        { 
+          error: 'Invalid request body',
+          errorCode: 'INVALID_JSON',
+          debug: { step: 'parse_body' }
+        },
+        { status: 400 }
+      );
+    }
+
+    const { date } = body;
+    console.log(`[REWRITE ${requestId}] Requested date: ${date}`);
+
+    if (!date) {
+      return NextResponse.json(
+        { 
+          error: 'Date is required',
+          errorCode: 'MISSING_DATE',
+          debug: { step: 'validate_date' }
+        },
+        { status: 400 }
+      );
+    }
+
+    // Step 3: Get existing article
+    console.log(`[REWRITE ${requestId}] Fetching existing article from database...`);
+    const existingArticle = await getArticleByDate(date);
+    
+    if (!existingArticle) {
+      console.log(`[REWRITE ${requestId}] Article not found for date: ${date}`);
+      return NextResponse.json(
+        { 
+          error: `No article found for date: ${date}`,
+          errorCode: 'ARTICLE_NOT_FOUND',
+          debug: { step: 'fetch_article', date }
+        },
+        { status: 404 }
+      );
+    }
+    console.log(`[REWRITE ${requestId}] Found existing article: "${existingArticle.title}"`);
+
+    // Step 4: Fetch ScienceDaily articles
+    console.log(`[REWRITE ${requestId}] Fetching ScienceDaily RSS feed...`);
+    const articles = await fetchPsychologyArticles();
+    
+    if (!articles || articles.length === 0) {
+      console.error(`[REWRITE ${requestId}] Failed to fetch ScienceDaily articles`);
+      return NextResponse.json(
+        { 
+          error: 'Could not fetch source articles from ScienceDaily. The RSS feed may be unavailable.',
+          errorCode: 'RSS_FETCH_FAILED',
+          debug: { step: 'fetch_rss', articlesCount: 0 }
+        },
+        { status: 503 }
+      );
+    }
+    console.log(`[REWRITE ${requestId}] Fetched ${articles.length} articles from RSS`);
+
+    // Step 5: Calculate which article to use
+    const dateSeed = new Date(date).getTime();
+    const seed = Math.floor(dateSeed / (1000 * 60 * 60 * 24));
+    const index = Math.abs(seed) % articles.length;
+    const sourceArticle = articles[index];
+    
+    console.log(`[REWRITE ${requestId}] Using article index ${index}: "${sourceArticle?.title}"`);
+
+    if (!sourceArticle) {
+      console.error(`[REWRITE ${requestId}] Source article is undefined at index ${index}`);
+      return NextResponse.json(
+        { 
+          error: 'Could not determine source article for this date',
+          errorCode: 'SOURCE_NOT_FOUND',
+          debug: { step: 'select_source', index, totalArticles: articles.length }
+        },
+        { status: 500 }
+      );
+    }
+
+    // Step 6: Generate new content with Groq
+    console.log(`[REWRITE ${requestId}] Starting AI generation...`);
+    console.log(`[REWRITE ${requestId}] Title: ${sourceArticle.title}`);
+    console.log(`[REWRITE ${requestId}] Summary: ${sourceArticle.description.substring(0, 100)}...`);
+    
+    const generated = await generatePsychologyArticle(
+      sourceArticle.title,
+      sourceArticle.description,
+      sourceArticle.link
+    );
+
+    if (!generated.success) {
+      console.error(`[REWRITE ${requestId}] AI generation failed:`, generated.error);
+      return NextResponse.json(
+        { 
+          error: generated.error || 'Failed to generate new content',
+          errorCode: generated.errorCode || 'GENERATION_FAILED',
+          debug: { 
+            step: 'generate_content',
+            groqError: generated.error,
+            groqErrorCode: generated.errorCode
+          }
+        },
+        { status: 500 }
+      );
+    }
+
+    console.log(`[REWRITE ${requestId}] AI generation successful, content length: ${generated.content?.length}`);
+
+    // Step 7: Update the article in database
+    console.log(`[REWRITE ${requestId}] Updating article in database...`);
+    const updatedTopic = {
+      ...existingArticle,
+      content: generated.content!,
+      keyInsights: generated.keyInsights!,
+      keyConcepts: generated.keyConcepts!,
+      dailyPractice: generated.dailyPractice!,
+      readingTime: Math.ceil(generated.content!.split(/\s+/).length / 200),
+    };
+
+    const success = await updateArticle(updatedTopic, user.id);
+
+    if (!success) {
+      console.error(`[REWRITE ${requestId}] Failed to save to database`);
+      return NextResponse.json(
+        { 
+          error: 'Generated new content but failed to save to database. Please try again.',
+          errorCode: 'DATABASE_SAVE_FAILED',
+          debug: { step: 'save_database' }
+        },
+        { status: 500 }
+      );
+    }
+
+    console.log(`[REWRITE ${requestId}] Article successfully rewritten and saved`);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Article rewritten successfully',
+      article: updatedTopic,
+      debug: {
+        requestId,
+        contentLength: generated.content?.length,
+        readingTime: updatedTopic.readingTime,
+      }
+    });
+
+  } catch (error) {
+    console.error(`[REWRITE ${requestId}] Unexpected error:`, error);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    return NextResponse.json(
+      { 
+        error: `Unexpected error during rewrite: ${errorMessage}`,
+        errorCode: 'UNEXPECTED_ERROR',
+        debug: {
+          requestId,
+          step: 'catch_block',
+          message: errorMessage,
+          stack: process.env.NODE_ENV === 'development' ? errorStack : undefined,
+        }
+      },
+      { status: 500 }
+    );
+  }
+}

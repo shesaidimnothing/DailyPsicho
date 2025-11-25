@@ -2,11 +2,17 @@
 // Source: Psychology news section on ScienceDaily
 // https://www.sciencedaily.com/news/mind_brain/psychology/
 //
-// Fetches RSS headlines, then uses Groq AI (free) to generate
-// unique educational articles every day.
+// Fetches RSS headlines, uses Groq AI to generate articles,
+// and stores them in PostgreSQL database.
 
 import type { DailyTopic, ExternalLink, KeyConcept } from '@/types/topic';
 import { generatePsychologyArticle } from './groq';
+import { 
+  initDatabase, 
+  saveArticle, 
+  getArticleByDate, 
+  getAllArticles 
+} from './database';
 
 export interface ScienceDailyArticle {
   title: string;
@@ -18,6 +24,9 @@ export interface ScienceDailyArticle {
 const PSYCHOLOGY_RSS_URL =
   process.env.SCIENCEDAILY_PSYCHOLOGY_RSS ||
   'https://www.sciencedaily.com/rss/mind_brain/psychology.xml';
+
+// Initialize database on module load
+initDatabase().catch(console.error);
 
 /**
  * Fetch and parse the ScienceDaily psychology RSS feed.
@@ -75,18 +84,6 @@ export async function fetchPsychologyArticles(): Promise<ScienceDailyArticle[]> 
   }
 }
 
-/**
- * Pick a deterministic article for a given seed (date-based).
- */
-export async function pickScienceDailyArticleBySeed(
-  seed: number
-): Promise<ScienceDailyArticle | null> {
-  const articles = await fetchPsychologyArticles();
-  if (!articles.length) return null;
-  const index = Math.abs(seed) % articles.length;
-  return articles[index];
-}
-
 function formatPubDate(pubDate?: string): string {
   if (!pubDate) return '';
   try {
@@ -120,7 +117,7 @@ function cleanHtml(text: string): string {
 }
 
 // ============================================================================
-// FALLBACK CONTENT (used when Groq API is not configured)
+// FALLBACK CONTENT (used when Groq API is not available)
 // ============================================================================
 
 function generateFallbackContent(
@@ -157,10 +154,9 @@ For individuals, staying informed about psychological research can provide valua
 
 While we wait for research findings to translate into clinical applications, there are always steps we can take to support our psychological well-being:
 
-- Stay curious about how your mind works
-- Practice evidence-based strategies for mental health (like regular exercise, adequate sleep, and social connection)
-- Be open to updating your understanding as new research emerges
-- Seek professional help when needed—it's a sign of strength, not weakness
+Stay curious about how your mind works. Practice evidence-based strategies for mental health, such as regular exercise, adequate sleep, and maintaining social connections.
+
+Be open to updating your understanding as new research emerges. Seek professional help when needed—it's a sign of strength, not weakness.
 
 **Looking Forward**
 
@@ -175,17 +171,22 @@ We encourage you to explore the original research linked below for the complete 
   const keyInsights = [
     description.split('.')[0] + '.',
     'Understanding brain and behavior research helps us make informed decisions about mental health.',
+    'Scientific discoveries often have practical applications we can use in daily life.',
     'For complete research details and methodology, see the original source.',
   ];
 
   const keyConcepts: KeyConcept[] = [
     {
       term: 'Psychological Research',
-      detail: 'Scientific studies that investigate mental processes, behavior, and their underlying mechanisms',
+      detail: 'Scientific studies that investigate mental processes, behavior, and their underlying mechanisms.',
     },
     {
       term: 'Evidence-Based Practice',
-      detail: 'Approaches and interventions that are supported by scientific research and data',
+      detail: 'Approaches and interventions that are supported by scientific research and data.',
+    },
+    {
+      term: 'Neuroplasticity',
+      detail: 'The brain\'s ability to change and adapt throughout life by forming new neural connections.',
     },
   ];
 
@@ -193,6 +194,7 @@ We encourage you to explore the original research linked below for the complete 
     'Take a few minutes to reflect on how today\'s topic relates to your own experiences.',
     'Consider one thing you learned that you could share with someone else.',
     'Think about whether this knowledge might change any of your daily habits or perspectives.',
+    'Write down one question this article raised for you.',
   ];
 
   return { content, keyInsights, keyConcepts, dailyPractice };
@@ -204,13 +206,19 @@ We encourage you to explore the original research linked below for the complete 
 
 /**
  * Create a DailyTopic from a ScienceDaily article.
- * Uses Groq AI to generate unique educational content if API key is available,
- * otherwise falls back to template-based content.
+ * First checks database, then generates with AI if needed.
  */
 export async function createTopicFromScienceDaily(
   article: ScienceDailyArticle,
   date: string
 ): Promise<DailyTopic> {
+  // First, check if we already have this article in the database
+  const existingArticle = await getArticleByDate(date);
+  if (existingArticle) {
+    console.log(`Found existing article in database for ${date}`);
+    return existingArticle;
+  }
+
   const cleanDescription = cleanHtml(article.description);
   const hasGroqKey = !!process.env.GROQ_API_KEY;
 
@@ -220,7 +228,6 @@ export async function createTopicFromScienceDaily(
   let dailyPractice: string[];
 
   if (hasGroqKey) {
-    // Use Groq AI to generate unique article
     console.log('Generating article with Groq AI for:', article.title);
     
     const generated = await generatePsychologyArticle(
@@ -229,14 +236,13 @@ export async function createTopicFromScienceDaily(
       article.link
     );
 
-    if (generated) {
+    if (generated.success && generated.content) {
       content = generated.content;
-      keyInsights = generated.keyInsights;
-      keyConcepts = generated.keyConcepts;
-      dailyPractice = generated.dailyPractice;
+      keyInsights = generated.keyInsights || [];
+      keyConcepts = generated.keyConcepts || [];
+      dailyPractice = generated.dailyPractice || [];
     } else {
-      // Groq failed, use fallback
-      console.warn('Groq generation failed, using fallback content');
+      console.warn('Groq generation failed:', generated.error);
       const fallback = generateFallbackContent(article.title, cleanDescription, article.pubDate);
       content = fallback.content;
       keyInsights = fallback.keyInsights;
@@ -244,7 +250,6 @@ export async function createTopicFromScienceDaily(
       dailyPractice = fallback.dailyPractice;
     }
   } else {
-    // No API key, use fallback
     console.log('No GROQ_API_KEY found, using fallback content');
     const fallback = generateFallbackContent(article.title, cleanDescription, article.pubDate);
     content = fallback.content;
@@ -266,7 +271,7 @@ export async function createTopicFromScienceDaily(
     },
   ];
 
-  return {
+  const topic: DailyTopic = {
     id: `sd-${date}-${article.title.slice(0, 20).replace(/\W/g, '')}`,
     title: article.title,
     content,
@@ -278,14 +283,26 @@ export async function createTopicFromScienceDaily(
     dailyPractice,
     readingTime: estimateReadingTime(content),
   };
+
+  // Save to database for future requests
+  await saveArticle(topic);
+
+  return topic;
 }
 
 /**
  * Get today's psychology topic.
- * Selects an article based on the date (deterministic) and generates content.
  */
 export async function getTodaysScienceDailyTopic(date: string): Promise<DailyTopic | null> {
   try {
+    // First check database
+    const existingArticle = await getArticleByDate(date);
+    if (existingArticle) {
+      console.log(`Returning cached article from database for ${date}`);
+      return existingArticle;
+    }
+
+    // Fetch from RSS and generate
     const articles = await fetchPsychologyArticles();
 
     if (!articles.length) {
@@ -294,7 +311,6 @@ export async function getTodaysScienceDailyTopic(date: string): Promise<DailyTop
     }
 
     // Use date-based seed for deterministic selection
-    // This ensures the same article is selected for the same date
     const dateSeed = new Date(date).getTime();
     const seed = Math.floor(dateSeed / (1000 * 60 * 60 * 24));
     const index = Math.abs(seed) % articles.length;
@@ -308,10 +324,19 @@ export async function getTodaysScienceDailyTopic(date: string): Promise<DailyTop
 }
 
 /**
- * Get archive of topics for the last N days.
+ * Get archive of topics.
+ * Returns from database if available, otherwise generates fallback.
  */
 export async function getScienceDailyArchive(days: number = 7): Promise<DailyTopic[]> {
   try {
+    // First try to get from database
+    const dbArticles = await getAllArticles(days);
+    if (dbArticles.length > 0) {
+      console.log(`Returning ${dbArticles.length} articles from database`);
+      return dbArticles;
+    }
+
+    // Fallback: generate from RSS
     const articles = await fetchPsychologyArticles();
 
     if (!articles.length) {
@@ -332,8 +357,7 @@ export async function getScienceDailyArchive(days: number = 7): Promise<DailyTop
 
       const article = articles[index];
       
-      // For archive, we use fallback to avoid many API calls
-      // Only today's article gets AI-generated content
+      // Use fallback for archive to avoid many API calls
       const fallback = generateFallbackContent(
         article.title,
         cleanHtml(article.description),

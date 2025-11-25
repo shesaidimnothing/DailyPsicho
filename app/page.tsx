@@ -35,7 +35,7 @@ export default async function Home() {
     <div className="min-h-screen bg-background">
       <Navigation />
       <main className="max-w-4xl mx-auto px-6 py-12 md:py-16">
-        <TopicContent topic={topic} />
+        <TopicContent topic={topic} showCountdown />
       </main>
     </div>
   );

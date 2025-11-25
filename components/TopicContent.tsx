@@ -3,10 +3,14 @@
 import { motion } from 'framer-motion';
 import VideoEmbed from './VideoEmbed';
 import ExternalLink from './ExternalLink';
+import CountdownTimer from './CountdownTimer';
+import ArticleActions from './ArticleActions';
+import ArticleBadges from './ArticleBadges';
 import type { DailyTopic } from '@/types/topic';
 
 interface TopicContentProps {
   topic: DailyTopic;
+  showCountdown?: boolean;
 }
 
 /**
@@ -85,22 +89,28 @@ function renderParagraph(text: string): React.ReactNode {
   return <>{parts}</>;
 }
 
-export default function TopicContent({ topic }: TopicContentProps) {
+export default function TopicContent({ topic, showCountdown = false }: TopicContentProps) {
   // Split content into paragraphs for animation
   const paragraphs = topic.content.split('\n\n').filter(p => p.trim());
 
   return (
     <article className="max-w-3xl mx-auto">
-      {/* Title */}
-      <motion.h1
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8 }}
-        className="font-title text-4xl md:text-5xl font-bold mb-6 leading-tight"
-        data-translate
-      >
-        {topic.title}
-      </motion.h1>
+      {/* Countdown Timer - only show on today's article */}
+      {showCountdown && <CountdownTimer />}
+
+      {/* Title with badges */}
+      <div className="flex flex-wrap items-start gap-4 mb-6">
+        <motion.h1
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="font-title text-4xl md:text-5xl font-bold leading-tight flex-1"
+          data-translate
+        >
+          {topic.title}
+        </motion.h1>
+        <ArticleBadges date={topic.date} showLabels />
+      </div>
 
       {/* Meta information */}
       <motion.div
@@ -259,6 +269,9 @@ export default function TopicContent({ topic }: TopicContentProps) {
           ))}
         </motion.section>
       )}
+
+      {/* Article Actions (Mark as Read, Rewrite) */}
+      <ArticleActions date={topic.date} />
     </article>
   );
 }

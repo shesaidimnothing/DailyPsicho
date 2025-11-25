@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Cinzel, Playfair_Display, Crimson_Text } from "next/font/google";
+import { AuthProvider } from "@/components/AuthContext";
 import "./globals.css";
 
 // Greek-inspired serif fonts
@@ -36,7 +37,9 @@ export default function RootLayout({
       <body
         className={`${cinzel.variable} ${playfair.variable} ${crimson.variable} antialiased`}
       >
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );
