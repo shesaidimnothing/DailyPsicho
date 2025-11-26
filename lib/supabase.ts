@@ -4,7 +4,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { DailyTopic } from '@/types/topic';
 import { getTodaysScienceDailyTopic, getScienceDailyArchive } from './sciencedaily';
-import { getArticleDate, getArchiveDates } from './date-utils';
+import { getArticleDate } from './date-utils';
 import { getAllArticles, getLatestArticle, getArticleByDate } from './database';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -100,13 +100,11 @@ export async function getAllTopics(): Promise<DailyTopic[]> {
 
     // Fallback: use ScienceDaily archive
     console.log('[getAllTopics] No database articles found, using ScienceDaily archive...');
-    const archiveDates = getArchiveDates(7);
-    return await getScienceDailyArchive(7, archiveDates);
+    return await getScienceDailyArchive(7);
   } catch (error) {
     console.error('[getAllTopics] Error fetching topics:', error);
     // Final fallback: use ScienceDaily archive
-    const archiveDates = getArchiveDates(7);
-    return await getScienceDailyArchive(7, archiveDates);
+    return await getScienceDailyArchive(7);
   }
 }
 
