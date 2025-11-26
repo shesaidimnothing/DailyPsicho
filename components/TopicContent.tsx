@@ -1,6 +1,5 @@
 'use client';
 
-import { motion } from 'framer-motion';
 import VideoEmbed from './VideoEmbed';
 import ExternalLink from './ExternalLink';
 import CountdownTimer from './CountdownTimer';
@@ -20,14 +19,14 @@ interface TopicContentProps {
 function renderParagraph(text: string): React.ReactNode {
   // Check if this is a horizontal rule
   if (text.trim() === '---') {
-    return <hr className="my-8 border-foreground/20" />;
+    return <hr className="my-8 border-[var(--border-color)]" />;
   }
 
   // Check if this is a section header (starts with **)
   const headerMatch = text.match(/^\*\*(.+?)\*\*$/);
   if (headerMatch) {
     return (
-      <h2 className="font-title text-2xl font-semibold mt-10 mb-4">
+      <h2 className="font-title text-xl md:text-2xl font-semibold mt-8 md:mt-10 mb-4">
         {headerMatch[1]}
       </h2>
     );
@@ -98,180 +97,157 @@ export default function TopicContent({ topic, showCountdown = false }: TopicCont
       {/* Countdown Timer - only show on today's article */}
       {showCountdown && <CountdownTimer />}
 
+      {/* Warning banner for fallback content */}
+      {topic.isFallbackContent && (
+        <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-400 dark:border-yellow-600 rounded-lg">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">⚠️</span>
+            <div className="flex-1">
+              <h3 className="font-semibold text-yellow-900 dark:text-yellow-200 mb-1">
+                Using Fallback Content
+              </h3>
+              <p className="text-sm text-yellow-800 dark:text-yellow-300 mb-2">
+                {topic.generationError || 'AI generation is temporarily unavailable.'}
+              </p>
+              {topic.generationError?.includes('Rate limit') && (
+                <p className="text-xs text-yellow-700 dark:text-yellow-400">
+                  The Groq API daily token limit has been reached. The limit resets in about 8 minutes, or you can upgrade your Groq tier at{' '}
+                  <a 
+                    href="https://console.groq.com/settings/billing" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="underline hover:text-yellow-900 dark:hover:text-yellow-200"
+                  >
+                    console.groq.com
+                  </a>
+                  . This article uses simplified fallback content instead of AI-generated content.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Title with badges */}
-      <div className="flex flex-wrap items-start gap-4 mb-6">
-        <motion.h1
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="font-title text-4xl md:text-5xl font-bold leading-tight flex-1"
+      <div className="flex flex-wrap items-start gap-3 md:gap-4 mb-4 md:mb-6">
+        <h1
+          className="font-title text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold leading-tight flex-1"
           data-translate
         >
           {topic.title}
-        </motion.h1>
-        <ArticleBadges date={topic.date} showLabels />
+        </h1>
+        <ArticleBadges articleId={topic.id} showLabels />
       </div>
 
       {/* Meta information */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-        className="flex flex-wrap items-center gap-4 mb-8 text-sm text-foreground/60 uppercase tracking-wider"
-      >
+      <div className="flex flex-wrap items-center gap-2 md:gap-4 mb-6 md:mb-8 text-xs md:text-sm text-[var(--text-muted)] uppercase tracking-wider">
         <span>{new Date(topic.date).toLocaleDateString('en-US', { 
           year: 'numeric', 
           month: 'long', 
           day: 'numeric' 
         })}</span>
-        <span className="greek-border w-12 h-0"></span>
+        <span className="text-[var(--gold-accent)]">•</span>
         <span>{topic.readingTime} min read</span>
-        <span className="greek-border w-12 h-0"></span>
+        <span className="text-[var(--gold-accent)]">•</span>
         <span className="capitalize">{topic.category}</span>
-      </motion.div>
+      </div>
 
       {/* Key Insights */}
       {topic.keyInsights && topic.keyInsights.length > 0 && (
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.3 }}
-          className="mb-10 bg-foreground/5 border border-foreground/10 p-6"
-        >
-          <h2 className="font-title text-2xl font-semibold mb-4">Today&apos;s Takeaways</h2>
-          <ul className="space-y-3 list-disc pl-5">
+        <section className="mb-8 md:mb-10 bg-[var(--bg-secondary)] border border-[var(--border-color)] p-4 md:p-6">
+          <h2 className="font-title text-lg md:text-2xl font-semibold mb-3 md:mb-4">Today&apos;s Takeaways</h2>
+          <ul className="space-y-2 md:space-y-3 list-disc pl-4 md:pl-5">
             {topic.keyInsights.map((insight, index) => (
-              <li key={index} className="text-lg leading-relaxed">
+              <li key={index} className="text-base md:text-lg leading-relaxed">
                 {insight}
               </li>
             ))}
           </ul>
-        </motion.section>
+        </section>
       )}
 
       {/* Key Concepts */}
       {topic.keyConcepts && topic.keyConcepts.length > 0 && (
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.4 }}
-          className="mb-10"
-        >
-          <h2 className="font-title text-2xl font-semibold mb-4">Key Concepts</h2>
-          <div className="grid gap-4">
+        <section className="mb-8 md:mb-10">
+          <h2 className="font-title text-lg md:text-2xl font-semibold mb-3 md:mb-4">Key Concepts</h2>
+          <div className="grid gap-3 md:gap-4">
             {topic.keyConcepts.map((concept, index) => (
               <div
                 key={index}
-                className="border border-foreground/10 p-4 bg-background/80 shadow-sm"
+                className="border border-[var(--border-color)] p-3 md:p-4 bg-[var(--bg-secondary)]"
               >
-                <p className="font-semibold uppercase tracking-wide text-sm text-foreground/70 mb-1">
+                <p className="font-semibold uppercase tracking-wide text-xs md:text-sm text-[var(--text-muted)] mb-1">
                   {concept.term}
                 </p>
-                <p className="text-lg leading-relaxed">{concept.detail}</p>
+                <p className="text-base md:text-lg leading-relaxed">{concept.detail}</p>
               </div>
             ))}
           </div>
-        </motion.section>
+        </section>
       )}
 
-      {/* Content paragraphs with fade-in animation */}
+      {/* Content paragraphs */}
       <div className="prose prose-lg max-w-none">
         {paragraphs.map((paragraph, index) => {
           const isHr = paragraph.trim() === '---';
           const isHeader = /^\*\*.+\*\*$/.test(paragraph.trim());
 
           if (isHr) {
-            return (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.4, delay: 0.3 + index * 0.05 }}
-              >
-                <hr className="my-8 border-foreground/20" />
-              </motion.div>
-            );
+            return <hr key={index} className="my-6 md:my-8 border-[var(--border-color)]" />;
           }
 
           if (isHeader) {
-            return (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.3 + index * 0.05 }}
-              >
-                {renderParagraph(paragraph)}
-              </motion.div>
-            );
+            return <div key={index}>{renderParagraph(paragraph)}</div>;
           }
 
           return (
-            <motion.p
+            <p
               key={index}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.3 + index * 0.05 }}
-              className="mb-6 text-lg leading-relaxed"
+              className="mb-4 md:mb-6 text-base md:text-lg leading-relaxed"
               data-translate
             >
               {renderParagraph(paragraph)}
-            </motion.p>
+            </p>
           );
         })}
       </div>
 
       {/* Daily Practice */}
       {topic.dailyPractice && topic.dailyPractice.length > 0 && (
-        <motion.section
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 0.5 }}
-          className="mt-12 bg-foreground/5 border border-foreground/10 p-6"
-        >
-          <h2 className="font-title text-2xl font-semibold mb-4">Try This Today</h2>
-          <ul className="list-disc pl-5 space-y-3">
+        <section className="mt-10 md:mt-12 bg-[var(--bg-secondary)] border border-[var(--border-color)] p-4 md:p-6">
+          <h2 className="font-title text-lg md:text-2xl font-semibold mb-3 md:mb-4">Try This Today</h2>
+          <ul className="list-disc pl-4 md:pl-5 space-y-2 md:space-y-3">
             {topic.dailyPractice.map((item, index) => (
-              <li key={index} className="text-lg leading-relaxed">
+              <li key={index} className="text-base md:text-lg leading-relaxed">
                 {item}
               </li>
             ))}
           </ul>
-        </motion.section>
+        </section>
       )}
 
       {/* Videos */}
       {topic.videos && topic.videos.length > 0 && (
-        <motion.section
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 0.5 }}
-          className="mt-12"
-        >
-          <h2 className="font-title text-2xl font-semibold mb-6" data-translate>Related Videos</h2>
+        <section className="mt-10 md:mt-12">
+          <h2 className="font-title text-lg md:text-2xl font-semibold mb-4 md:mb-6" data-translate>Related Videos</h2>
           {topic.videos.map((video, index) => (
             <VideoEmbed key={index} video={video} index={index} />
           ))}
-        </motion.section>
+        </section>
       )}
 
       {/* External Links */}
       {topic.links && topic.links.length > 0 && (
-        <motion.section
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 0.6 }}
-          className="mt-12"
-        >
-          <h2 className="font-title text-2xl font-semibold mb-6" data-translate>Further Reading</h2>
+        <section className="mt-10 md:mt-12">
+          <h2 className="font-title text-lg md:text-2xl font-semibold mb-4 md:mb-6" data-translate>Further Reading</h2>
           {topic.links.map((link, index) => (
             <ExternalLink key={index} link={link} index={index} />
           ))}
-        </motion.section>
+        </section>
       )}
 
       {/* Article Actions (Mark as Read, Rewrite) */}
-      <ArticleActions date={topic.date} />
+      <ArticleActions articleId={topic.id} date={topic.date} />
     </article>
   );
 }

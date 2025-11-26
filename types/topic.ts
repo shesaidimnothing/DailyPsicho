@@ -32,5 +32,6 @@ export interface DailyTopic {
   readingTime: number; // Estimated reading time in minutes
   createdAt?: string;
   updatedAt?: string;
+  isFallbackContent?: boolean; // True if using fallback instead of AI-generated
+  generationError?: string; // Error message if AI generation failed
 }
-

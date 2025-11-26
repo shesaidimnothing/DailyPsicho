@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { getUserReadArticles, getAllRewrittenDates } from '@/lib/database';
+import { getUserReadArticles, getAllRewrittenIds } from '@/lib/database';
 
 export async function GET() {
   try {
@@ -10,18 +10,17 @@ export async function GET() {
       return NextResponse.json({ user: null });
     }
 
-    // Get user's read articles and all rewritten dates
+    // Get user's read article IDs and all rewritten article IDs
     const readArticles = await getUserReadArticles(user.id);
-    const rewrittenDates = await getAllRewrittenDates();
+    const rewrittenIds = await getAllRewrittenIds();
 
     return NextResponse.json({
       user: { id: user.id, email: user.email },
-      readArticles,
-      rewrittenDates,
+      readArticles,      // Array of article IDs the user has read
+      rewrittenIds,      // Array of article IDs that have been rewritten
     });
   } catch (error) {
     console.error('Get user error:', error);
     return NextResponse.json({ user: null });
   }
 }
-

@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { motion } from 'framer-motion';
 import ArticleBadges from './ArticleBadges';
 import type { DailyTopic } from '@/types/topic';
 
@@ -10,25 +9,20 @@ interface ArchiveItemProps {
   index: number;
 }
 
-export default function ArchiveItem({ topic, index }: ArchiveItemProps) {
+export default function ArchiveItem({ topic }: ArchiveItemProps) {
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 30 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: index * 0.1 }}
-      className="border-b border-foreground/10 pb-8 last:border-0"
-    >
+    <article className="border-b border-[var(--border-color)] pb-6 md:pb-8 last:border-0">
       <Link
         href={`/topic/${topic.date}`}
-        className="block group hover:opacity-80 transition-opacity"
+        className="block"
       >
-        <div className="flex flex-wrap items-center gap-3 mb-3">
-          <h2 className="font-title text-2xl md:text-3xl font-semibold group-hover:underline" data-translate>
+        <div className="flex flex-wrap items-center gap-2 md:gap-3 mb-2 md:mb-3">
+          <h2 className="font-title text-xl md:text-2xl lg:text-3xl font-semibold" data-translate>
             {topic.title}
           </h2>
-          <ArticleBadges date={topic.date} />
+          <ArticleBadges articleId={topic.id} />
         </div>
-        <div className="flex flex-wrap items-center gap-4 text-sm text-foreground/60 uppercase tracking-wider mb-4">
+        <div className="flex flex-wrap items-center gap-2 md:gap-4 text-xs md:text-sm text-[var(--text-muted)] uppercase tracking-wider mb-3 md:mb-4">
           <span>
             {new Date(topic.date).toLocaleDateString('en-US', {
               year: 'numeric',
@@ -36,15 +30,15 @@ export default function ArchiveItem({ topic, index }: ArchiveItemProps) {
               day: 'numeric',
             })}
           </span>
-          <span className="greek-border w-8 h-0"></span>
+          <span className="text-[var(--gold-accent)]">•</span>
           <span>{topic.readingTime} min read</span>
-          <span className="greek-border w-8 h-0"></span>
+          <span className="text-[var(--gold-accent)]">•</span>
           <span className="capitalize">{topic.category}</span>
         </div>
-        <p className="text-foreground/70 line-clamp-3" data-translate>
+        <p className="text-sm md:text-base text-[var(--text-secondary)] line-clamp-3" data-translate>
           {topic.content.substring(0, 200)}...
         </p>
       </Link>
-    </motion.article>
+    </article>
   );
 }

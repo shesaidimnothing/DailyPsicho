@@ -13,16 +13,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const { date } = await request.json();
+    const { articleId } = await request.json();
 
-    if (!date) {
+    if (!articleId) {
       return NextResponse.json(
-        { error: 'Date is required' },
+        { error: 'Article ID is required' },
         { status: 400 }
       );
     }
 
-    const success = await markArticleAsRead(user.id, date);
+    const success = await markArticleAsRead(user.id, articleId);
 
     if (!success) {
       return NextResponse.json(
@@ -43,4 +43,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

@@ -4,7 +4,9 @@ import ArchiveItem from '@/components/ArchiveItem';
 import GreekOrnament from '@/components/GreekOrnament';
 import { Metadata } from 'next';
 
-export const revalidate = 3600; // Revalidate every hour for archive
+// Disable caching for archive too
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export const metadata: Metadata = {
   title: 'Archive - Daily Psicho',

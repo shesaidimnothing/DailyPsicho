@@ -3,15 +3,15 @@
 import { useAuth } from './AuthContext';
 
 interface ArticleBadgesProps {
-  date: string;
+  articleId: string;  // Use unique article ID instead of date
   showLabels?: boolean;
 }
 
-export default function ArticleBadges({ date, showLabels = false }: ArticleBadgesProps) {
-  const { readArticles, rewrittenDates } = useAuth();
+export default function ArticleBadges({ articleId, showLabels = false }: ArticleBadgesProps) {
+  const { readArticles, rewrittenIds } = useAuth();
 
-  const isRead = readArticles.includes(date);
-  const isRewritten = rewrittenDates.includes(date);
+  const isRead = readArticles.includes(articleId);
+  const isRewritten = rewrittenIds.includes(articleId);
 
   if (!isRead && !isRewritten) return null;
 
@@ -38,4 +38,3 @@ export default function ArticleBadges({ date, showLabels = false }: ArticleBadge
     </div>
   );
 }
-

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 
 export default function ThemeToggle() {
   const [isDark, setIsDark] = useState(false);
@@ -36,18 +35,16 @@ export default function ThemeToggle() {
   // Don't render until mounted (prevents hydration mismatch)
   if (!mounted) {
     return (
-      <div className="w-9 h-9 flex items-center justify-center border border-[var(--border-color)] rounded-sm">
+      <div className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center border border-[var(--border-color)]">
         <div className="w-4 h-4 rounded-full bg-[var(--border-color)]" />
       </div>
     );
   }
 
   return (
-    <motion.button
+    <button
       onClick={toggleTheme}
-      className="w-9 h-9 flex items-center justify-center border border-[var(--border-color)] hover:border-[var(--gold-accent)] hover:text-[var(--gold-accent)] transition-colors rounded-sm"
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
+      className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center border border-[var(--border-color)] active:bg-[var(--bg-accent)] transition-colors"
       title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
     >
@@ -55,8 +52,8 @@ export default function ThemeToggle() {
         // Sun icon for dark mode (click to go light)
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          width="18"
-          height="18"
+          width="16"
+          height="16"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -78,8 +75,8 @@ export default function ThemeToggle() {
         // Moon icon for light mode (click to go dark)
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          width="18"
-          height="18"
+          width="16"
+          height="16"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -90,6 +87,6 @@ export default function ThemeToggle() {
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
         </svg>
       )}
-    </motion.button>
+    </button>
   );
 }

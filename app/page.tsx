@@ -3,10 +3,12 @@ import TopicContent from '@/components/TopicContent';
 import Navigation from '@/components/Navigation';
 import GreekOrnament from '@/components/GreekOrnament';
 import { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 
-// Configure ISR (Incremental Static Regeneration) for daily updates
-// This will regenerate the page at most once per day (86400 seconds)
-export const revalidate = 86400; // 24 hours in seconds
+// Disable caching - always fetch fresh content
+// This ensures the article updates at 6 PM
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export const metadata: Metadata = {
   title: 'Daily Psicho - Today\'s Topic',
@@ -16,21 +18,9 @@ export const metadata: Metadata = {
 export default async function Home() {
   const topic = await getLatestTopic();
 
+  // If no topic and Groq is unavailable, redirect to wait page
   if (!topic) {
-    return (
-      <div className="min-h-screen">
-        <Navigation />
-        <main className="max-w-4xl mx-auto px-6 py-16">
-          <GreekOrnament type="header" />
-          <div className="text-center">
-            <h1 className="font-title text-3xl mb-4">No topic available</h1>
-            <p className="text-[var(--text-muted)]">
-              Please check your CMS configuration or try again later.
-            </p>
-          </div>
-        </main>
-      </div>
-    );
+    redirect('/wait');
   }
 
   return (

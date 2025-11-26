@@ -1,7 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+
+// Reset time config - change these values to update reset time
+const RESET_HOUR = 8;   // 8 AM in 24-hour format
+const RESET_MINUTE = 30; // Minutes
+
+function getResetTimeDisplay(): string {
+  if (RESET_HOUR >= 12) {
+    const displayHour = RESET_HOUR === 12 ? 12 : RESET_HOUR - 12;
+    return `${displayHour}:${String(RESET_MINUTE).padStart(2, '0')} PM`;
+  } else {
+    const displayHour = RESET_HOUR === 0 ? 12 : RESET_HOUR;
+    return `${displayHour}:${String(RESET_MINUTE).padStart(2, '0')} AM`;
+  }
+}
 
 export default function CountdownTimer() {
   const [timeLeft, setTimeLeft] = useState<{ hours: number; minutes: number; seconds: number } | null>(null);
@@ -11,10 +24,10 @@ export default function CountdownTimer() {
       const now = new Date();
       const target = new Date();
       
-      // Set target to 6 PM today
-      target.setHours(18, 0, 0, 0);
+      // Set target to reset time today
+      target.setHours(RESET_HOUR, RESET_MINUTE, 0, 0);
       
-      // If it's already past 6 PM, set to 6 PM tomorrow
+      // If it's already past reset time, set to reset time tomorrow
       if (now >= target) {
         target.setDate(target.getDate() + 1);
       }
@@ -44,51 +57,41 @@ export default function CountdownTimer() {
   const formatNumber = (n: number) => n.toString().padStart(2, '0');
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="relative bg-[var(--bg-secondary)] border border-[var(--border-color)] px-6 py-5 mb-10"
-    >
-      {/* Greek corner decorations */}
-      <span className="absolute top-2 left-2 text-[var(--gold-accent)] opacity-40">⌜</span>
-      <span className="absolute top-2 right-2 text-[var(--gold-accent)] opacity-40">⌝</span>
-      <span className="absolute bottom-2 left-2 text-[var(--gold-accent)] opacity-40">⌞</span>
-      <span className="absolute bottom-2 right-2 text-[var(--gold-accent)] opacity-40">⌟</span>
-      
-      <div className="flex items-center gap-3 mb-3">
+    <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] px-4 md:px-6 py-4 mb-8">
+      <div className="flex items-center gap-2 mb-3">
         <span className="text-[var(--gold-accent)]">⏳</span>
-        <p className="text-sm uppercase tracking-widest text-[var(--text-muted)] font-heading">
-          Time remaining to read today&apos;s scroll
+        <p className="text-xs md:text-sm uppercase tracking-wider text-[var(--text-muted)] font-heading">
+          Time until next article
         </p>
       </div>
       
-      <div className="flex items-center gap-3 font-title text-3xl font-bold">
+      <div className="flex items-center gap-2 md:gap-3 font-title text-xl md:text-2xl font-bold">
         <div className="flex flex-col items-center">
-          <span className="bg-gradient-to-b from-[var(--gold-accent)] to-[var(--gold-dark)] text-black px-4 py-2 min-w-[60px] text-center">
+          <span className="bg-gradient-to-b from-[var(--gold-accent)] to-[var(--gold-dark)] text-black px-3 md:px-4 py-1.5 md:py-2 min-w-[45px] md:min-w-[55px] text-center text-lg md:text-2xl">
             {formatNumber(timeLeft.hours)}
           </span>
-          <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mt-1">Hours</span>
+          <span className="text-[8px] md:text-[10px] uppercase tracking-wider text-[var(--text-muted)] mt-1">Hrs</span>
         </div>
-        <span className="text-[var(--gold-accent)] text-2xl mb-4">⋮</span>
+        <span className="text-[var(--gold-accent)] text-lg md:text-xl">:</span>
         <div className="flex flex-col items-center">
-          <span className="bg-gradient-to-b from-[var(--gold-accent)] to-[var(--gold-dark)] text-black px-4 py-2 min-w-[60px] text-center">
+          <span className="bg-gradient-to-b from-[var(--gold-accent)] to-[var(--gold-dark)] text-black px-3 md:px-4 py-1.5 md:py-2 min-w-[45px] md:min-w-[55px] text-center text-lg md:text-2xl">
             {formatNumber(timeLeft.minutes)}
           </span>
-          <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mt-1">Minutes</span>
+          <span className="text-[8px] md:text-[10px] uppercase tracking-wider text-[var(--text-muted)] mt-1">Min</span>
         </div>
-        <span className="text-[var(--gold-accent)] text-2xl mb-4">⋮</span>
+        <span className="text-[var(--gold-accent)] text-lg md:text-xl">:</span>
         <div className="flex flex-col items-center">
-          <span className="bg-gradient-to-b from-[var(--gold-accent)] to-[var(--gold-dark)] text-black px-4 py-2 min-w-[60px] text-center">
+          <span className="bg-gradient-to-b from-[var(--gold-accent)] to-[var(--gold-dark)] text-black px-3 md:px-4 py-1.5 md:py-2 min-w-[45px] md:min-w-[55px] text-center text-lg md:text-2xl">
             {formatNumber(timeLeft.seconds)}
           </span>
-          <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mt-1">Seconds</span>
+          <span className="text-[8px] md:text-[10px] uppercase tracking-wider text-[var(--text-muted)] mt-1">Sec</span>
         </div>
       </div>
       
-      <p className="text-xs text-[var(--text-muted)] mt-4 flex items-center gap-2">
+      <p className="text-[10px] md:text-xs text-[var(--text-muted)] mt-3 flex items-center gap-2">
         <span className="text-[var(--gold-accent)]">☀</span>
-        New wisdom arrives daily at sunset (6:00 PM)
+        Resets daily at {getResetTimeDisplay()}
       </p>
-    </motion.div>
+    </div>
   );
 }

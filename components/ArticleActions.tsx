@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { motion } from 'framer-motion';
 import { useAuth } from './AuthContext';
 
 interface ArticleActionsProps {
-  date: string;
+  articleId: string;  // Unique article ID for tracking
+  date: string;       // Date needed for rewrite API
   onRewriteComplete?: () => void;
 }
 
@@ -15,18 +15,18 @@ interface ErrorDetails {
   debug?: Record<string, unknown>;
 }
 
-export default function ArticleActions({ date, onRewriteComplete }: ArticleActionsProps) {
-  const { user, readArticles, rewrittenDates, markAsRead, rewriteArticle } = useAuth();
+export default function ArticleActions({ articleId, date, onRewriteComplete }: ArticleActionsProps) {
+  const { user, readArticles, rewrittenIds, markAsRead, rewriteArticle } = useAuth();
   const [rewriting, setRewriting] = useState(false);
   const [error, setError] = useState<ErrorDetails | null>(null);
   const [showDebug, setShowDebug] = useState(false);
 
-  const isRead = readArticles.includes(date);
-  const isRewritten = rewrittenDates.includes(date);
+  const isRead = readArticles.includes(articleId);
+  const isRewritten = rewrittenIds.includes(articleId);
 
   const handleMarkAsRead = async () => {
     if (!user) return;
-    await markAsRead(date);
+    await markAsRead(articleId);
   };
 
   const handleRewrite = async () => {
@@ -54,8 +54,8 @@ export default function ArticleActions({ date, onRewriteComplete }: ArticleActio
 
   if (!user) {
     return (
-      <div className="mt-8 p-4 border border-foreground/10 bg-foreground/5 text-center">
-        <p className="text-foreground/60">
+      <div className="mt-8 p-4 border border-[var(--border-color)] bg-[var(--bg-secondary)] text-center">
+        <p className="text-[var(--text-muted)] text-sm md:text-base">
           Sign in to mark articles as read and request rewrites
         </p>
       </div>
@@ -63,30 +63,26 @@ export default function ArticleActions({ date, onRewriteComplete }: ArticleActio
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="mt-12 border-t border-foreground/10 pt-8"
-    >
-      <div className="flex flex-wrap gap-4 items-center">
+    <div className="mt-10 md:mt-12 border-t border-[var(--border-color)] pt-6 md:pt-8">
+      <div className="flex flex-wrap gap-3 md:gap-4 items-center">
         {/* Mark as Read Button */}
         <button
           onClick={handleMarkAsRead}
           disabled={isRead}
-          className={`flex items-center gap-2 px-6 py-3 font-semibold uppercase tracking-wider transition-all ${
+          className={`flex items-center gap-2 px-4 md:px-6 py-2.5 md:py-3 text-sm md:text-base font-semibold uppercase tracking-wider transition-all ${
             isRead
               ? 'bg-green-600 text-white cursor-default'
-              : 'bg-foreground/10 hover:bg-green-600 hover:text-white'
+              : 'bg-[var(--bg-accent)] active:bg-green-600 active:text-white'
           }`}
         >
           {isRead ? (
             <>
-              <span className="text-lg">✓</span>
+              <span>✓</span>
               <span>Read</span>
             </>
           ) : (
             <>
-              <span className="text-lg">○</span>
+              <span>○</span>
               <span>Mark as Read</span>
             </>
           )}
@@ -96,25 +92,26 @@ export default function ArticleActions({ date, onRewriteComplete }: ArticleActio
         <button
           onClick={handleRewrite}
           disabled={rewriting}
-          className={`flex items-center gap-2 px-6 py-3 font-semibold uppercase tracking-wider transition-all ${
+          className={`flex items-center gap-2 px-4 md:px-6 py-2.5 md:py-3 text-sm md:text-base font-semibold uppercase tracking-wider transition-all ${
             isRewritten
               ? 'bg-blue-600 text-white'
-              : 'bg-foreground/10 hover:bg-blue-600 hover:text-white'
+              : 'bg-[var(--bg-accent)] active:bg-blue-600 active:text-white'
           } disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {rewriting ? (
             <>
               <span className="animate-spin">⟳</span>
-              <span>Rewriting... (this may take 30-60 seconds)</span>
+              <span className="hidden sm:inline">Rewriting... (30-60s)</span>
+              <span className="sm:hidden">Rewriting...</span>
             </>
           ) : isRewritten ? (
             <>
-              <span className="text-lg">↻</span>
+              <span>↻</span>
               <span>Rewrite Again</span>
             </>
           ) : (
             <>
-              <span className="text-lg">↻</span>
+              <span>↻</span>
               <span>Rewrite Article</span>
             </>
           )}
@@ -123,13 +120,13 @@ export default function ArticleActions({ date, onRewriteComplete }: ArticleActio
 
       {/* Error Display */}
       {error && (
-        <div className="mt-4 p-4 bg-red-50 border border-red-200 text-red-800">
-          <div className="flex items-start justify-between">
+        <div className="mt-4 p-3 md:p-4 bg-red-50 border border-red-200 text-red-800 text-sm md:text-base">
+          <div className="flex items-start justify-between gap-2">
             <div>
               <p className="font-semibold">Rewrite Failed</p>
               <p className="mt-1">{error.message}</p>
               {error.code && (
-                <p className="mt-1 text-sm text-red-600">
+                <p className="mt-1 text-xs md:text-sm text-red-600">
                   Error code: {error.code}
                 </p>
               )}
@@ -137,9 +134,9 @@ export default function ArticleActions({ date, onRewriteComplete }: ArticleActio
             {error.debug && (
               <button
                 onClick={() => setShowDebug(!showDebug)}
-                className="text-sm underline hover:no-underline"
+                className="text-xs md:text-sm underline shrink-0"
               >
-                {showDebug ? 'Hide details' : 'Show details'}
+                {showDebug ? 'Hide' : 'Details'}
               </button>
             )}
           </div>
@@ -152,7 +149,7 @@ export default function ArticleActions({ date, onRewriteComplete }: ArticleActio
           
           <button
             onClick={() => setError(null)}
-            className="mt-3 text-sm underline hover:no-underline"
+            className="mt-3 text-xs md:text-sm underline"
           >
             Dismiss
           </button>
@@ -160,10 +157,10 @@ export default function ArticleActions({ date, onRewriteComplete }: ArticleActio
       )}
 
       {isRewritten && !error && (
-        <p className="mt-4 text-sm text-foreground/60">
-          This article has been rewritten by a user. Click &quot;Rewrite Again&quot; to generate a new version.
+        <p className="mt-4 text-xs md:text-sm text-[var(--text-muted)]">
+          This article has been rewritten. Click &quot;Rewrite Again&quot; to generate a new version.
         </p>
       )}
-    </motion.div>
+    </div>
   );
 }

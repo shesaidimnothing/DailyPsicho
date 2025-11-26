@@ -3,8 +3,6 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { motion } from 'framer-motion';
-import LanguageToggle from './LanguageToggle';
 import ThemeToggle from './ThemeToggle';
 import AuthModal from './AuthModal';
 import { useAuth } from './AuthContext';
@@ -16,105 +14,77 @@ export default function Navigation() {
 
   return (
     <>
-      <nav className="py-6 relative">
+      <nav className="py-3 md:py-4 relative">
         {/* Greek pattern top border */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[var(--gold-accent)] to-transparent opacity-60" />
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-[var(--gold-accent)] to-transparent opacity-60" />
         
-        <div className="max-w-4xl mx-auto px-6">
+        <div className="max-w-4xl mx-auto px-4 md:px-6">
           {/* Logo and main nav */}
-          <div className="flex items-center justify-between">
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="flex items-center gap-3"
-            >
-              {/* Greek column icon */}
-              <span className="text-[var(--gold-accent)] text-2xl">🏛</span>
-              <Link href="/" className="group">
-                <span className="text-2xl font-heading font-bold tracking-wide" data-translate>
+          <div className="flex items-center justify-between gap-2">
+            {/* Logo - simplified on mobile */}
+            <Link href="/" className="flex items-center gap-2 shrink-0">
+              <span className="text-[var(--gold-accent)] text-xl md:text-2xl">🏛</span>
+              <div>
+                <span className="text-lg md:text-xl font-heading font-bold tracking-wide" data-translate>
                   Daily Psicho
                 </span>
-                <span className="block text-[10px] tracking-[0.2em] uppercase text-[var(--text-muted)] font-heading">
+                <span className="hidden sm:block text-[9px] tracking-[0.15em] uppercase text-[var(--text-muted)] font-heading">
                   Wisdom for the Mind
                 </span>
-              </Link>
-            </motion.div>
-
-            <motion.div
-              className="flex gap-2 md:gap-4 items-center"
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-            >
-              <ul className="flex gap-4 md:gap-6 items-center">
-                <li>
-                  <Link
-                    href="/"
-                    className={`relative text-sm uppercase tracking-wider transition-colors hover:text-[var(--gold-accent)] ${
-                      pathname === '/' ? 'font-semibold text-[var(--gold-accent)]' : 'text-[var(--text-muted)]'
-                    }`}
-                    data-translate
-                  >
-                    Today
-                    {pathname === '/' && (
-                      <motion.span
-                        layoutId="nav-indicator"
-                        className="absolute -bottom-1 left-0 right-0 h-0.5 bg-[var(--gold-accent)]"
-                      />
-                    )}
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/archive"
-                    className={`relative text-sm uppercase tracking-wider transition-colors hover:text-[var(--gold-accent)] ${
-                      pathname === '/archive' ? 'font-semibold text-[var(--gold-accent)]' : 'text-[var(--text-muted)]'
-                    }`}
-                    data-translate
-                  >
-                    Archive
-                    {pathname === '/archive' && (
-                      <motion.span
-                        layoutId="nav-indicator"
-                        className="absolute -bottom-1 left-0 right-0 h-0.5 bg-[var(--gold-accent)]"
-                      />
-                    )}
-                  </Link>
-                </li>
-              </ul>
-
-              {/* Vertical divider */}
-              <span className="hidden md:block w-px h-6 bg-[var(--border-color)]" />
-
-              <div className="flex items-center gap-2">
-                <ThemeToggle />
-                <LanguageToggle />
-                
-                {!loading && (
-                  user ? (
-                    <div className="flex items-center gap-2 md:gap-3">
-                      <span className="text-xs text-[var(--text-muted)] hidden lg:block max-w-[120px] truncate">
-                        {user.email}
-                      </span>
-                      <button
-                        onClick={logout}
-                        className="text-xs uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--gold-accent)] transition-colors px-3 py-1.5 border border-[var(--border-color)] hover:border-[var(--gold-accent)]"
-                      >
-                        Logout
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setShowAuthModal(true)}
-                      className="text-xs uppercase tracking-wider px-4 py-2 bg-[var(--gold-accent)] text-black font-semibold hover:bg-[var(--gold-dark)] transition-colors"
-                    >
-                      Sign In
-                    </button>
-                  )
-                )}
               </div>
-            </motion.div>
+            </Link>
+
+            {/* Right side controls */}
+            <div className="flex items-center gap-1.5 md:gap-3">
+              {/* Nav links */}
+              <Link
+                href="/"
+                className={`text-xs md:text-sm uppercase tracking-wider px-2 py-1 ${
+                  pathname === '/' 
+                    ? 'font-semibold text-[var(--gold-accent)] border-b-2 border-[var(--gold-accent)]' 
+                    : 'text-[var(--text-muted)]'
+                }`}
+                data-translate
+              >
+                Today
+              </Link>
+              <Link
+                href="/archive"
+                className={`text-xs md:text-sm uppercase tracking-wider px-2 py-1 ${
+                  pathname === '/archive' 
+                    ? 'font-semibold text-[var(--gold-accent)] border-b-2 border-[var(--gold-accent)]' 
+                    : 'text-[var(--text-muted)]'
+                }`}
+                data-translate
+              >
+                Archive
+              </Link>
+
+              {/* Divider - desktop only */}
+              <span className="hidden md:block w-px h-5 bg-[var(--border-color)] mx-1" />
+
+              {/* Theme toggle */}
+              <ThemeToggle />
+              
+              {/* Auth button */}
+              {!loading && (
+                user ? (
+                  <button
+                    onClick={logout}
+                    className="text-[10px] md:text-xs uppercase tracking-wider text-[var(--text-muted)] px-2 py-1 border border-[var(--border-color)]"
+                  >
+                    Out
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowAuthModal(true)}
+                    className="text-[10px] md:text-xs uppercase tracking-wider px-2 md:px-3 py-1.5 bg-[var(--gold-accent)] text-black font-semibold"
+                  >
+                    Sign In
+                  </button>
+                )
+              )}
+            </div>
           </div>
         </div>
 

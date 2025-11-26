@@ -1,24 +1,11 @@
 // Supabase client configuration
 // To use this, set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your .env.local file
-// 
-// Example Supabase setup:
-// 1. Create a project at https://supabase.com
-// 2. Create a table called 'daily_topics' with columns:
-//    - id (uuid, primary key)
-//    - title (text)
-//    - content (text)
-//    - date (date, unique)
-//    - category (text)
-//    - videos (jsonb, nullable)
-//    - links (jsonb, nullable)
-//    - reading_time (integer)
-//    - created_at (timestamp)
-//    - updated_at (timestamp)
-// 3. Add your API keys to .env.local
 
 import { createClient } from '@supabase/supabase-js';
 import type { DailyTopic } from '@/types/topic';
 import { getTodaysScienceDailyTopic, getScienceDailyArchive } from './sciencedaily';
+import { getArticleDate, getArchiveDates } from './date-utils';
+import { getAllArticles, getLatestArticle, getArticleByDate } from './database';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -53,67 +40,48 @@ async function getContentForDate(date: string): Promise<DailyTopic | null> {
   }
 }
 
-// Fetch the latest daily topic
+// Fetch the latest daily topic (based on 6 PM reset time)
+// This returns the most recently created article
 export async function getLatestTopic(): Promise<DailyTopic | null> {
-  const today = new Date().toISOString().split('T')[0];
+  const articleDate = getArticleDate();
+  console.log(`[getLatestTopic] Current article date: ${articleDate}`);
   
-  if (!supabase) {
-    // If Supabase is not configured, fetch from ScienceDaily
-    console.log('Fetching content from ScienceDaily...');
-    return await getContentForDate(today);
+  // Use getTodaysScienceDailyTopic which handles:
+  // 1. Checking if a new article should be generated (after reset time)
+  // 2. Returning existing article if no new one needed
+  // 3. Generating new article with Groq if needed
+  console.log('[getLatestTopic] Checking for article...');
+  const topic = await getTodaysScienceDailyTopic(articleDate);
+  
+  if (topic) {
+    console.log(`[getLatestTopic] Returning article: "${topic.title}"`);
+    return topic;
   }
-
-  try {
-    // First, check if we have a topic for today in the database
-    const { data: todayData, error: todayError } = await supabase
-      .from('daily_topics')
-      .select('*')
-      .eq('date', today)
-      .single();
-
-    if (!todayError && todayData) {
-      return transformSupabaseData(todayData);
-    }
-
-    // If no topic for today, get the latest available
-    const { data, error } = await supabase
-      .from('daily_topics')
-      .select('*')
-      .order('date', { ascending: false })
-      .limit(1)
-      .single();
-
-    if (error || !data) {
-      // No topics in database, fetch from ScienceDaily
-      console.log('No topics in database. Fetching from ScienceDaily...');
-      return await getContentForDate(today);
-    }
-
-    return transformSupabaseData(data);
-  } catch (error) {
-    console.error('Error fetching latest topic:', error);
-    return await getContentForDate(today);
+  
+  // Fallback to latest from database
+  const latestFromDb = await getLatestArticle();
+  if (latestFromDb) {
+    console.log(`[getLatestTopic] Using latest from DB: "${latestFromDb.title}"`);
+    return latestFromDb;
   }
+  
+  // Final fallback
+  console.log('[getLatestTopic] No article found, returning fallback');
+  return getFallbackTopic(articleDate);
 }
 
-// Fetch topic by date
+// Fetch topic by date (returns the most recent article for that date)
 export async function getTopicByDate(date: string): Promise<DailyTopic | null> {
-  if (!supabase) {
-    return await getContentForDate(date);
-  }
-
   try {
-    const { data, error } = await supabase
-      .from('daily_topics')
-      .select('*')
-      .eq('date', date)
-      .single();
-
-    if (error || !data) {
-      return await getContentForDate(date);
+    // Try PostgreSQL database first
+    const dbArticle = await getArticleByDate(date);
+    if (dbArticle) {
+      console.log(`[getTopicByDate] Found article in DB for ${date}: "${dbArticle.title}"`);
+      return dbArticle;
     }
 
-    return transformSupabaseData(data);
+    // Fallback to generating from ScienceDaily
+    return await getContentForDate(date);
   } catch (error) {
     console.error('Error fetching topic by date:', error);
     return await getContentForDate(date);
@@ -122,27 +90,23 @@ export async function getTopicByDate(date: string): Promise<DailyTopic | null> {
 
 // Fetch all topics for archive
 export async function getAllTopics(): Promise<DailyTopic[]> {
-  if (!supabase) {
-    // Get last 7 days from ScienceDaily
-    console.log('Fetching archive from ScienceDaily...');
-    return await getScienceDailyArchive(7);
-  }
-
   try {
-    const { data, error } = await supabase
-      .from('daily_topics')
-      .select('*')
-      .order('date', { ascending: false });
-
-    if (error || !data || data.length === 0) {
-      console.error('Error fetching from database, using ScienceDaily:', error);
-      return await getScienceDailyArchive(7);
+    // First try to get from PostgreSQL database
+    const dbArticles = await getAllArticles(30);
+    if (dbArticles.length > 0) {
+      console.log(`[getAllTopics] Returning ${dbArticles.length} articles from database`);
+      return dbArticles;
     }
 
-    return data.map(transformSupabaseData);
+    // Fallback: use ScienceDaily archive
+    console.log('[getAllTopics] No database articles found, using ScienceDaily archive...');
+    const archiveDates = getArchiveDates(7);
+    return await getScienceDailyArchive(7, archiveDates);
   } catch (error) {
-    console.error('Error fetching all topics:', error);
-    return await getScienceDailyArchive(7);
+    console.error('[getAllTopics] Error fetching topics:', error);
+    // Final fallback: use ScienceDaily archive
+    const archiveDates = getArchiveDates(7);
+    return await getScienceDailyArchive(7, archiveDates);
   }
 }
 

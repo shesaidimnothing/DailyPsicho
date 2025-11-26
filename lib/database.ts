@@ -47,11 +47,11 @@ export async function initDatabase(): Promise<void> {
   }
 
   try {
-    // Articles table
+    // Articles table - multiple articles can exist per date
     await pool.query(`
       CREATE TABLE IF NOT EXISTS daily_articles (
         id SERIAL PRIMARY KEY,
-        date VARCHAR(10) UNIQUE NOT NULL,
+        date VARCHAR(10) NOT NULL,
         title TEXT NOT NULL,
         content TEXT NOT NULL,
         category VARCHAR(50) DEFAULT 'psychology',
@@ -63,6 +63,8 @@ export async function initDatabase(): Promise<void> {
         source_url TEXT,
         rewrite_count INTEGER DEFAULT 0,
         last_rewritten_at TIMESTAMP,
+        is_fallback_content BOOLEAN DEFAULT FALSE,
+        generation_error TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -78,14 +80,15 @@ export async function initDatabase(): Promise<void> {
     `);
 
     // User article interactions (read/rewrite tracking)
+    // Uses article_id (unique string ID) instead of date for proper tracking
     await pool.query(`
       CREATE TABLE IF NOT EXISTS user_article_interactions (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        article_date VARCHAR(10) NOT NULL,
+        article_id TEXT NOT NULL,
         has_read BOOLEAN DEFAULT FALSE,
         read_at TIMESTAMP,
-        UNIQUE(user_id, article_date)
+        UNIQUE(user_id, article_id)
       )
     `);
 
@@ -93,7 +96,7 @@ export async function initDatabase(): Promise<void> {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS article_rewrites (
         id SERIAL PRIMARY KEY,
-        article_date VARCHAR(10) UNIQUE NOT NULL,
+        article_id TEXT UNIQUE NOT NULL,
         rewritten_by_user_id INTEGER REFERENCES users(id),
         rewritten_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -111,6 +114,7 @@ export async function initDatabase(): Promise<void> {
 
 /**
  * Save a generated article to the database
+ * Always adds as a new row - multiple articles can exist for the same date
  */
 export async function saveArticle(topic: DailyTopic): Promise<boolean> {
   if (!pool) return false;
@@ -118,18 +122,8 @@ export async function saveArticle(topic: DailyTopic): Promise<boolean> {
   try {
     await pool.query(
       `INSERT INTO daily_articles 
-        (date, title, content, category, reading_time, key_insights, key_concepts, daily_practice, links, source_url)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       ON CONFLICT (date) DO UPDATE SET
-        title = EXCLUDED.title,
-        content = EXCLUDED.content,
-        category = EXCLUDED.category,
-        reading_time = EXCLUDED.reading_time,
-        key_insights = EXCLUDED.key_insights,
-        key_concepts = EXCLUDED.key_concepts,
-        daily_practice = EXCLUDED.daily_practice,
-        links = EXCLUDED.links,
-        source_url = EXCLUDED.source_url`,
+        (date, title, content, category, reading_time, key_insights, key_concepts, daily_practice, links, source_url, is_fallback_content, generation_error)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         topic.date,
         topic.title,
@@ -141,18 +135,56 @@ export async function saveArticle(topic: DailyTopic): Promise<boolean> {
         JSON.stringify(topic.dailyPractice || []),
         JSON.stringify(topic.links || []),
         topic.links?.[0]?.url || null,
+        topic.isFallbackContent || false,
+        topic.generationError || null,
       ]
     );
-    console.log(`Article saved to database for date: ${topic.date}`);
+    console.log(`[DB] New article added for date: ${topic.date}`);
     return true;
   } catch (error) {
-    console.error('Error saving article:', error);
+    console.error('[DB] Error saving article:', error);
     return false;
   }
 }
 
 /**
+ * Get the most recently created article
+ */
+export async function getLatestArticle(): Promise<DailyTopic | null> {
+  if (!pool) return null;
+
+  try {
+    const result = await pool.query(
+      'SELECT * FROM daily_articles ORDER BY created_at DESC LIMIT 1'
+    );
+
+    if (result.rows.length === 0) return null;
+
+    const row = result.rows[0];
+    return {
+      id: `db-${row.id}`,
+      date: row.date,
+      title: row.title,
+      content: row.content,
+      category: row.category || 'psychology',
+      readingTime: row.reading_time || 10,
+      keyInsights: row.key_insights || [],
+      keyConcepts: row.key_concepts || [],
+      dailyPractice: row.daily_practice || [],
+      links: row.links || [],
+      isFallbackContent: row.is_fallback_content || false,
+      generationError: row.generation_error || undefined,
+    };
+  } catch (error) {
+    console.error('Error fetching latest article:', error);
+    return null;
+  }
+}
+
+/**
  * Update an existing article (for rewrites)
+ * IMPORTANT: Only allows updates to fallback articles (is_fallback_content = true)
+ * Groq-generated articles are immutable and cannot be updated
  */
 export async function updateArticle(topic: DailyTopic, userId?: number): Promise<boolean> {
   console.log('[DATABASE] updateArticle called for date:', topic.date);
@@ -164,6 +196,25 @@ export async function updateArticle(topic: DailyTopic, userId?: number): Promise
   }
 
   try {
+    // First, check if the article is Groq-generated (immutable)
+    const existing = await pool.query(
+      'SELECT is_fallback_content FROM daily_articles WHERE date = $1',
+      [topic.date]
+    );
+    
+    if (existing.rows.length === 0) {
+      console.error('[DATABASE] Article not found for update');
+      return false;
+    }
+    
+    const isFallback = existing.rows[0].is_fallback_content;
+    
+    if (!isFallback) {
+      console.error('[DATABASE] Cannot update: Article is Groq-generated and immutable');
+      throw new Error('Article is Groq-generated and cannot be updated. Only fallback articles can be edited.');
+    }
+    
+    console.log('[DATABASE] Article is fallback content - update allowed');
     console.log('[DATABASE] Executing UPDATE query...');
     const result = await pool.query(
       `UPDATE daily_articles SET
@@ -173,8 +224,10 @@ export async function updateArticle(topic: DailyTopic, userId?: number): Promise
         key_concepts = $5,
         daily_practice = $6,
         rewrite_count = COALESCE(rewrite_count, 0) + 1,
-        last_rewritten_at = CURRENT_TIMESTAMP
-       WHERE date = $1`,
+        last_rewritten_at = CURRENT_TIMESTAMP,
+        is_fallback_content = FALSE,
+        generation_error = NULL
+       WHERE date = $1 AND is_fallback_content = TRUE`,
       [
         topic.date,
         topic.content,
@@ -186,17 +239,22 @@ export async function updateArticle(topic: DailyTopic, userId?: number): Promise
     );
     
     console.log('[DATABASE] UPDATE result rowCount:', result.rowCount);
+    
+    if (result.rowCount === 0) {
+      console.error('[DATABASE] Update failed - article may not be fallback content or does not exist');
+      return false;
+    }
 
-    // Track who rewrote it
-    if (userId) {
-      console.log('[DATABASE] Tracking rewrite by user:', userId);
+    // Track who rewrote it (using article ID for unique tracking)
+    if (userId && topic.id) {
+      console.log('[DATABASE] Tracking rewrite by user:', userId, 'for article:', topic.id);
       await pool.query(
-        `INSERT INTO article_rewrites (article_date, rewritten_by_user_id)
+        `INSERT INTO article_rewrites (article_id, rewritten_by_user_id)
          VALUES ($1, $2)
-         ON CONFLICT (article_date) DO UPDATE SET
+         ON CONFLICT (article_id) DO UPDATE SET
            rewritten_by_user_id = $2,
            rewritten_at = CURRENT_TIMESTAMP`,
-        [topic.date, userId]
+        [topic.id, userId]
       );
     }
 
@@ -216,7 +274,7 @@ export async function getArticleByDate(date: string): Promise<DailyTopic | null>
 
   try {
     const result = await pool.query(
-      'SELECT * FROM daily_articles WHERE date = $1',
+      'SELECT * FROM daily_articles WHERE date = $1 ORDER BY created_at DESC LIMIT 1',
       [date]
     );
 
@@ -234,6 +292,8 @@ export async function getArticleByDate(date: string): Promise<DailyTopic | null>
       keyConcepts: row.key_concepts || [],
       dailyPractice: row.daily_practice || [],
       links: row.links || [],
+      isFallbackContent: row.is_fallback_content ?? true,  // Default to true if not set
+      generationError: row.generation_error || undefined,
     };
   } catch (error) {
     console.error('Error fetching article:', error);
@@ -242,14 +302,14 @@ export async function getArticleByDate(date: string): Promise<DailyTopic | null>
 }
 
 /**
- * Get all articles from the database
+ * Get all articles from the database, ordered by creation time (newest first)
  */
 export async function getAllArticles(limit: number = 30): Promise<DailyTopic[]> {
   if (!pool) return [];
 
   try {
     const result = await pool.query(
-      'SELECT * FROM daily_articles ORDER BY date DESC LIMIT $1',
+      'SELECT * FROM daily_articles ORDER BY created_at DESC LIMIT $1',
       [limit]
     );
 
@@ -264,6 +324,8 @@ export async function getAllArticles(limit: number = 30): Promise<DailyTopic[]> 
       keyConcepts: row.key_concepts || [],
       dailyPractice: row.daily_practice || [],
       links: row.links || [],
+      isFallbackContent: row.is_fallback_content || false,
+      generationError: row.generation_error || undefined,
     }));
   } catch (error) {
     console.error('Error fetching articles:', error);
@@ -274,13 +336,13 @@ export async function getAllArticles(limit: number = 30): Promise<DailyTopic[]> 
 /**
  * Check if article was rewritten
  */
-export async function getArticleRewriteInfo(date: string): Promise<{ rewritten: boolean; rewrittenAt?: string } | null> {
+export async function getArticleRewriteInfo(articleId: string): Promise<{ rewritten: boolean; rewrittenAt?: string } | null> {
   if (!pool) return null;
 
   try {
     const result = await pool.query(
-      'SELECT rewritten_at FROM article_rewrites WHERE article_date = $1',
-      [date]
+      'SELECT rewritten_at FROM article_rewrites WHERE article_id = $1',
+      [articleId]
     );
 
     if (result.rows.length === 0) {
@@ -388,19 +450,19 @@ export async function getUserById(id: number): Promise<{ id: number; email: stri
 // ============================================================================
 
 /**
- * Mark article as read by user
+ * Mark article as read by user (using unique article ID)
  */
-export async function markArticleAsRead(userId: number, articleDate: string): Promise<boolean> {
+export async function markArticleAsRead(userId: number, articleId: string): Promise<boolean> {
   if (!pool) return false;
 
   try {
     await pool.query(
-      `INSERT INTO user_article_interactions (user_id, article_date, has_read, read_at)
+      `INSERT INTO user_article_interactions (user_id, article_id, has_read, read_at)
        VALUES ($1, $2, TRUE, CURRENT_TIMESTAMP)
-       ON CONFLICT (user_id, article_date) DO UPDATE SET
+       ON CONFLICT (user_id, article_id) DO UPDATE SET
          has_read = TRUE,
          read_at = COALESCE(user_article_interactions.read_at, CURRENT_TIMESTAMP)`,
-      [userId, articleDate]
+      [userId, articleId]
     );
     return true;
   } catch (error) {
@@ -410,17 +472,17 @@ export async function markArticleAsRead(userId: number, articleDate: string): Pr
 }
 
 /**
- * Get user's read articles
+ * Get user's read article IDs
  */
 export async function getUserReadArticles(userId: number): Promise<string[]> {
   if (!pool) return [];
 
   try {
     const result = await pool.query(
-      'SELECT article_date FROM user_article_interactions WHERE user_id = $1 AND has_read = TRUE',
+      'SELECT article_id FROM user_article_interactions WHERE user_id = $1 AND has_read = TRUE',
       [userId]
     );
-    return result.rows.map(r => r.article_date);
+    return result.rows.map(r => r.article_id);
   } catch (error) {
     console.error('Error getting read articles:', error);
     return [];
@@ -428,18 +490,18 @@ export async function getUserReadArticles(userId: number): Promise<string[]> {
 }
 
 /**
- * Get all rewritten article dates
+ * Get all rewritten article IDs
  */
-export async function getAllRewrittenDates(): Promise<string[]> {
+export async function getAllRewrittenIds(): Promise<string[]> {
   if (!pool) return [];
 
   try {
     const result = await pool.query(
-      'SELECT article_date FROM article_rewrites'
+      'SELECT article_id FROM article_rewrites'
     );
-    return result.rows.map(r => r.article_date);
+    return result.rows.map(r => r.article_id);
   } catch (error) {
-    console.error('Error getting rewritten dates:', error);
+    console.error('Error getting rewritten articles:', error);
     return [];
   }
 }
@@ -447,17 +509,55 @@ export async function getAllRewrittenDates(): Promise<string[]> {
 /**
  * Check if specific article was read by user
  */
-export async function hasUserReadArticle(userId: number, articleDate: string): Promise<boolean> {
+export async function hasUserReadArticle(userId: number, articleId: string): Promise<boolean> {
   if (!pool) return false;
 
   try {
     const result = await pool.query(
-      'SELECT 1 FROM user_article_interactions WHERE user_id = $1 AND article_date = $2 AND has_read = TRUE',
-      [userId, articleDate]
+      'SELECT 1 FROM user_article_interactions WHERE user_id = $1 AND article_id = $2 AND has_read = TRUE',
+      [userId, articleId]
     );
     return result.rows.length > 0;
   } catch (error) {
     console.error('Error checking if article read:', error);
     return false;
+  }
+}
+
+/**
+ * Find article by title (case-insensitive search)
+ */
+export async function findArticleByTitle(searchTerm: string): Promise<DailyTopic | null> {
+  if (!pool) return null;
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM daily_articles 
+       WHERE LOWER(title) LIKE LOWER($1) 
+       ORDER BY created_at DESC 
+       LIMIT 1`,
+      [`%${searchTerm}%`]
+    );
+
+    if (result.rows.length === 0) return null;
+
+    const row = result.rows[0];
+    return {
+      id: `db-${row.id}`,
+      date: row.date,
+      title: row.title,
+      content: row.content,
+      category: row.category || 'psychology',
+      readingTime: row.reading_time || 10,
+      keyInsights: row.key_insights || [],
+      keyConcepts: row.key_concepts || [],
+      dailyPractice: row.daily_practice || [],
+      links: row.links || [],
+      isFallbackContent: row.is_fallback_content || false,
+      generationError: row.generation_error || undefined,
+    };
+  } catch (error) {
+    console.error('Error finding article by title:', error);
+    return null;
   }
 }

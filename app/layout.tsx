@@ -38,7 +38,7 @@ export default function RootLayout({
         className={`${cinzel.variable} ${playfair.variable} ${crimson.variable} antialiased`}
       >
         <AuthProvider>
-          {children}
+        {children}
         </AuthProvider>
       </body>
     </html>

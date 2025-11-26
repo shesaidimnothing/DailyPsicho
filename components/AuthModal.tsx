@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from './AuthContext';
 
 interface AuthModalProps {
@@ -40,111 +39,97 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   if (!isOpen) return null;
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
-        onClick={onClose}
+    <div
+      className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="relative bg-[var(--bg-primary)] border-2 border-[var(--gold-accent)] p-6 md:p-8 max-w-md w-full mx-4"
+        onClick={e => e.stopPropagation()}
       >
-        <motion.div
-          initial={{ scale: 0.95, opacity: 0, y: 20 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.95, opacity: 0, y: 20 }}
-          className="relative bg-[var(--bg-primary)] border-2 border-[var(--gold-accent)] p-8 max-w-md w-full"
-          onClick={e => e.stopPropagation()}
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 text-[var(--text-muted)] text-2xl leading-none"
         >
-          {/* Greek corner decorations */}
-          <span className="absolute top-3 left-3 text-[var(--gold-accent)] text-xl">⌜</span>
-          <span className="absolute top-3 right-3 text-[var(--gold-accent)] text-xl">⌝</span>
-          <span className="absolute bottom-3 left-3 text-[var(--gold-accent)] text-xl">⌞</span>
-          <span className="absolute bottom-3 right-3 text-[var(--gold-accent)] text-xl">⌟</span>
+          ×
+        </button>
 
-          {/* Close button */}
+        {/* Header */}
+        <div className="text-center mb-6">
+          <span className="text-[var(--gold-accent)] text-2xl">🏛</span>
+          <h2 className="font-title text-xl md:text-2xl font-bold mt-2">
+            {mode === 'login' ? 'Welcome Back' : 'Join the Academy'}
+          </h2>
+          <p className="text-[var(--text-muted)] text-xs md:text-sm mt-1 font-heading tracking-wider">
+            {mode === 'login' ? 'Enter the halls of wisdom' : 'Begin your journey'}
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-[10px] md:text-xs uppercase tracking-widest text-[var(--text-muted)] mb-2 font-heading">
+              Email Address
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="w-full px-3 md:px-4 py-2.5 md:py-3 border-2 border-[var(--border-color)] bg-[var(--bg-secondary)] text-sm md:text-base"
+              placeholder="scholar@example.com"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] md:text-xs uppercase tracking-widest text-[var(--text-muted)] mb-2 font-heading">
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="w-full px-3 md:px-4 py-2.5 md:py-3 border-2 border-[var(--border-color)] bg-[var(--bg-secondary)] text-sm md:text-base"
+              placeholder="••••••••"
+              required
+              minLength={6}
+            />
+          </div>
+
+          {error && (
+            <p className="text-red-500 text-sm text-center">{error}</p>
+          )}
+
           <button
-            onClick={onClose}
-            className="absolute top-4 right-10 text-[var(--text-muted)] hover:text-[var(--gold-accent)] text-2xl transition-colors"
+            type="submit"
+            disabled={loading}
+            className="w-full py-2.5 md:py-3 bg-gradient-to-r from-[var(--gold-accent)] to-[var(--gold-dark)] text-black font-semibold uppercase tracking-widest disabled:opacity-50 font-heading text-sm md:text-base"
           >
-            ×
+            {loading ? '...' : mode === 'login' ? 'Enter' : 'Join'}
           </button>
+        </form>
 
-          {/* Header */}
-          <div className="text-center mb-8">
-            <span className="text-[var(--gold-accent)] text-3xl">🏛</span>
-            <h2 className="font-title text-2xl font-bold mt-2">
-              {mode === 'login' ? 'Welcome Back' : 'Join the Academy'}
-            </h2>
-            <p className="text-[var(--text-muted)] text-sm mt-1 font-heading tracking-wider">
-              {mode === 'login' ? 'Enter the halls of wisdom' : 'Begin your journey'}
-            </p>
-          </div>
+        {/* Divider */}
+        <div className="flex items-center gap-4 my-5">
+          <span className="flex-1 h-px bg-[var(--border-color)]" />
+          <span className="text-[var(--gold-accent)]">❧</span>
+          <span className="flex-1 h-px bg-[var(--border-color)]" />
+        </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-xs uppercase tracking-widest text-[var(--text-muted)] mb-2 font-heading">
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full px-4 py-3 border-2 border-[var(--border-color)] bg-[var(--bg-secondary)] focus:border-[var(--gold-accent)] outline-none transition-colors"
-                placeholder="scholar@example.com"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs uppercase tracking-widest text-[var(--text-muted)] mb-2 font-heading">
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border-2 border-[var(--border-color)] bg-[var(--bg-secondary)] focus:border-[var(--gold-accent)] outline-none transition-colors"
-                placeholder="••••••••"
-                required
-                minLength={6}
-              />
-            </div>
-
-            {error && (
-              <p className="text-red-500 text-sm text-center">{error}</p>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-gradient-to-r from-[var(--gold-accent)] to-[var(--gold-dark)] text-black font-semibold uppercase tracking-widest hover:opacity-90 transition-opacity disabled:opacity-50 font-heading"
-            >
-              {loading ? '...' : mode === 'login' ? 'Enter' : 'Join'}
-            </button>
-          </form>
-
-          {/* Divider */}
-          <div className="flex items-center gap-4 my-6">
-            <span className="flex-1 h-px bg-[var(--border-color)]" />
-            <span className="text-[var(--gold-accent)]">❧</span>
-            <span className="flex-1 h-px bg-[var(--border-color)]" />
-          </div>
-
-          <div className="text-center">
-            <button
-              onClick={() => {
-                setMode(mode === 'login' ? 'register' : 'login');
-                setError('');
-              }}
-              className="text-sm text-[var(--text-muted)] hover:text-[var(--gold-accent)] transition-colors"
-            >
-              {mode === 'login' 
-                ? "New to the Academy? Create an account" 
-                : 'Already a member? Sign in'}
-            </button>
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+        <div className="text-center">
+          <button
+            onClick={() => {
+              setMode(mode === 'login' ? 'register' : 'login');
+              setError('');
+            }}
+            className="text-xs md:text-sm text-[var(--text-muted)]"
+          >
+            {mode === 'login' 
+              ? "New here? Create an account" 
+              : 'Already a member? Sign in'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -16,13 +16,13 @@ interface RewriteResult {
 
 interface AuthContextType {
   user: User | null;
-  readArticles: string[];
-  rewrittenDates: string[];
+  readArticles: string[];      // Array of article IDs user has read
+  rewrittenIds: string[];      // Array of article IDs that have been rewritten
   loading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
-  markAsRead: (date: string) => Promise<boolean>;
+  markAsRead: (articleId: string) => Promise<boolean>;
   rewriteArticle: (date: string) => Promise<RewriteResult>;
   refreshUser: () => Promise<void>;
 }
@@ -32,7 +32,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [readArticles, setReadArticles] = useState<string[]>([]);
-  const [rewrittenDates, setRewrittenDates] = useState<string[]>([]);
+  const [rewrittenIds, setRewrittenIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refreshUser = async () => {
@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       setUser(data.user || null);
       setReadArticles(data.readArticles || []);
-      setRewrittenDates(data.rewrittenDates || []);
+      setRewrittenIds(data.rewrittenIds || []);
     } catch (error) {
       console.error('Error fetching user:', error);
       setUser(null);
@@ -68,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: true };
       }
       return { success: false, error: data.error };
-    } catch (error) {
+    } catch {
       return { success: false, error: 'Login failed' };
     }
   };
@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: true };
       }
       return { success: false, error: data.error };
-    } catch (error) {
+    } catch {
       return { success: false, error: 'Registration failed' };
     }
   };
@@ -97,28 +97,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await fetch('/api/auth/logout', { method: 'POST' });
       setUser(null);
       setReadArticles([]);
+      setRewrittenIds([]);
     } catch (error) {
       console.error('Logout error:', error);
     }
   };
 
-  const markAsRead = async (date: string) => {
+  const markAsRead = async (articleId: string) => {
     if (!user) return false;
     
     try {
       const res = await fetch('/api/articles/mark-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date }),
+        body: JSON.stringify({ articleId }),
       });
       const data = await res.json();
       
       if (data.success) {
-        setReadArticles(prev => [...new Set([...prev, date])]);
+        setReadArticles(prev => [...new Set([...prev, articleId])]);
         return true;
       }
       return false;
-    } catch (error) {
+    } catch {
       return false;
     }
   };
@@ -132,8 +133,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
     }
     
-    console.log('[AuthContext] Starting rewrite for date:', date);
-    
     try {
       const res = await fetch('/api/articles/rewrite', {
         method: 'POST',
@@ -141,13 +140,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ date }),
       });
       
-      console.log('[AuthContext] Rewrite response status:', res.status);
-      
       const data = await res.json();
-      console.log('[AuthContext] Rewrite response data:', data);
       
       if (data.success) {
-        setRewrittenDates(prev => [...new Set([...prev, date])]);
+        // Refresh to get updated rewritten IDs
+        await refreshUser();
         return { success: true };
       }
       
@@ -158,7 +155,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         debug: data.debug
       };
     } catch (error) {
-      console.error('[AuthContext] Rewrite exception:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return { 
         success: false, 
@@ -173,7 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{
       user,
       readArticles,
-      rewrittenDates,
+      rewrittenIds,
       loading,
       login,
       register,

@@ -1,17 +1,17 @@
 // ScienceDaily integration for psychology news
-// Source: Psychology news section on ScienceDaily
-// https://www.sciencedaily.com/news/mind_brain/psychology/
-//
 // Fetches RSS headlines, uses Groq AI to generate articles,
 // and stores them in PostgreSQL database.
 
 import type { DailyTopic, ExternalLink, KeyConcept } from '@/types/topic';
 import { generatePsychologyArticle } from './groq';
+import { isGroqAvailable } from './groq-check';
+import { RESET_HOUR, RESET_MINUTE, isPastResetTime, isBeforeResetTime } from './reset-config';
 import { 
   initDatabase, 
   saveArticle, 
-  getArticleByDate, 
-  getAllArticles 
+  getLatestArticle,
+  getAllArticles,
+  getArticleByDate,
 } from './database';
 
 export interface ScienceDailyArticle {
@@ -27,6 +27,13 @@ const PSYCHOLOGY_RSS_URL =
 
 // Initialize database on module load
 initDatabase().catch(console.error);
+
+// In-memory state to prevent duplicate generations
+let isGenerating = false;
+let lastGenerationTime: number | null = null;
+
+// Minimum time between generations (5 minutes)
+const MIN_GENERATION_INTERVAL = 5 * 60 * 1000;
 
 /**
  * Fetch and parse the ScienceDaily psychology RSS feed.
@@ -84,6 +91,24 @@ export async function fetchPsychologyArticles(): Promise<ScienceDailyArticle[]> 
   }
 }
 
+function cleanHtml(text: string): string {
+  return text
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .trim();
+}
+
+function estimateReadingTime(text: string): number {
+  const wordsPerMinute = 200;
+  const wordCount = text.split(/\s+/).length;
+  return Math.max(2, Math.ceil(wordCount / wordsPerMinute));
+}
+
 function formatPubDate(pubDate?: string): string {
   if (!pubDate) return '';
   try {
@@ -97,28 +122,6 @@ function formatPubDate(pubDate?: string): string {
     return pubDate;
   }
 }
-
-function estimateReadingTime(text: string): number {
-  const wordsPerMinute = 200;
-  const wordCount = text.split(/\s+/).length;
-  return Math.max(2, Math.ceil(wordCount / wordsPerMinute));
-}
-
-function cleanHtml(text: string): string {
-  return text
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .trim();
-}
-
-// ============================================================================
-// FALLBACK CONTENT (used when Groq API is not available)
-// ============================================================================
 
 function generateFallbackContent(
   title: string,
@@ -200,25 +203,89 @@ We encourage you to explore the original research linked below for the complete 
   return { content, keyInsights, keyConcepts, dailyPractice };
 }
 
-// ============================================================================
-// MAIN TOPIC CREATION
-// ============================================================================
+/**
+ * Check if we should generate a NEW article.
+ * Generate if:
+ * - We are past reset time today AND
+ * - No article was created after reset time today AND
+ * - We haven't generated recently (prevents duplicates from page refreshes)
+ */
+async function shouldGenerateNewArticle(): Promise<boolean> {
+  // Check in-memory lock
+  if (isGenerating) {
+    console.log('[shouldGenerate] Already generating - skip');
+    return false;
+  }
+
+  // Check if we generated recently (prevents duplicates)
+  if (lastGenerationTime && (Date.now() - lastGenerationTime) < MIN_GENERATION_INTERVAL) {
+    console.log('[shouldGenerate] Generated recently - skip');
+    return false;
+  }
+
+  // Only generate if we're past reset time
+  if (!isPastResetTime()) {
+    console.log('[shouldGenerate] Not past reset time yet');
+    return false;
+  }
+
+  try {
+    // Check if any article was created after reset time TODAY
+    const { Pool } = await import('pg');
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false }
+    });
+
+    // Get the most recent article
+    const result = await pool.query(
+      'SELECT created_at FROM daily_articles ORDER BY created_at DESC LIMIT 1'
+    );
+    await pool.end();
+
+    if (result.rows.length === 0) {
+      console.log('[shouldGenerate] No articles exist - will generate');
+      return true;
+    }
+
+    const createdAt = new Date(result.rows[0].created_at);
+    const now = new Date();
+    
+    // Check if the most recent article was created today
+    const isCreatedToday = createdAt.toDateString() === now.toDateString();
+    
+    if (!isCreatedToday) {
+      console.log('[shouldGenerate] No article created today - will generate');
+      return true;
+    }
+
+    // Check if it was created after reset time today
+    const createdHour = createdAt.getHours();
+    const createdMinute = createdAt.getMinutes();
+    const wasCreatedAfterReset = !isBeforeResetTime(createdHour, createdMinute);
+    
+    if (wasCreatedAfterReset) {
+      // Update lastGenerationTime so we don't keep checking
+      lastGenerationTime = createdAt.getTime();
+      console.log(`[shouldGenerate] Article exists for this period (${createdHour}:${String(createdMinute).padStart(2, '0')}) - NOT generating`);
+      return false;
+    }
+
+    console.log(`[shouldGenerate] Article from before reset - will generate new one`);
+    return true;
+  } catch (error) {
+    console.error('[shouldGenerate] Error:', error);
+    return false;
+  }
+}
 
 /**
  * Create a DailyTopic from a ScienceDaily article.
- * First checks database, then generates with AI if needed.
  */
-export async function createTopicFromScienceDaily(
+async function createTopicFromScienceDaily(
   article: ScienceDailyArticle,
   date: string
 ): Promise<DailyTopic> {
-  // First, check if we already have this article in the database
-  const existingArticle = await getArticleByDate(date);
-  if (existingArticle) {
-    console.log(`Found existing article in database for ${date}`);
-    return existingArticle;
-  }
-
   const cleanDescription = cleanHtml(article.description);
   const hasGroqKey = !!process.env.GROQ_API_KEY;
 
@@ -226,9 +293,11 @@ export async function createTopicFromScienceDaily(
   let keyInsights: string[];
   let keyConcepts: KeyConcept[];
   let dailyPractice: string[];
+  let isFallbackContent = false;
+  let generationError: string | undefined = undefined;
 
   if (hasGroqKey) {
-    console.log('Generating article with Groq AI for:', article.title);
+    console.log('[createTopic] Generating with Groq AI for:', article.title);
     
     const generated = await generatePsychologyArticle(
       article.title,
@@ -241,8 +310,12 @@ export async function createTopicFromScienceDaily(
       keyInsights = generated.keyInsights || [];
       keyConcepts = generated.keyConcepts || [];
       dailyPractice = generated.dailyPractice || [];
+      isFallbackContent = false;
+      console.log('[createTopic] Groq generation successful');
     } else {
-      console.warn('Groq generation failed:', generated.error);
+      console.warn('[createTopic] Groq failed:', generated.error);
+      isFallbackContent = true;
+      generationError = generated.error;
       const fallback = generateFallbackContent(article.title, cleanDescription, article.pubDate);
       content = fallback.content;
       keyInsights = fallback.keyInsights;
@@ -250,7 +323,9 @@ export async function createTopicFromScienceDaily(
       dailyPractice = fallback.dailyPractice;
     }
   } else {
-    console.log('No GROQ_API_KEY found, using fallback content');
+    console.log('[createTopic] No GROQ_API_KEY, using fallback');
+    isFallbackContent = true;
+    generationError = 'Groq API key not configured';
     const fallback = generateFallbackContent(article.title, cleanDescription, article.pubDate);
     content = fallback.content;
     keyInsights = fallback.keyInsights;
@@ -282,82 +357,117 @@ export async function createTopicFromScienceDaily(
     keyConcepts,
     dailyPractice,
     readingTime: estimateReadingTime(content),
+    isFallbackContent,
+    generationError,
   };
 
-  // Save to database for future requests
-  await saveArticle(topic);
+  // Save to database
+  const saved = await saveArticle(topic);
+  if (saved) {
+    // Mark generation time to prevent duplicates
+    lastGenerationTime = Date.now();
+    console.log(`[createTopic] Saved article for ${date}`);
+  }
 
   return topic;
 }
 
 /**
- * Get today's psychology topic.
+ * Get the topic for a specific date.
+ * - Returns most recent article normally
+ * - Generates a new one only after reset time if none exists for this period
  */
-export async function getTodaysScienceDailyTopic(date: string): Promise<DailyTopic | null> {
+export async function getTodaysScienceDailyTopic(date: string, forceGenerate: boolean = false): Promise<DailyTopic | null> {
   try {
-    // First check database
-    const existingArticle = await getArticleByDate(date);
-    if (existingArticle) {
-      console.log(`Returning cached article from database for ${date}`);
-      return existingArticle;
+    // Get the most recent article
+    const latestArticle = await getLatestArticle();
+    
+    // Check if we should generate a new article
+    const shouldGenerate = forceGenerate || await shouldGenerateNewArticle();
+    
+    if (!shouldGenerate) {
+      if (latestArticle) {
+        console.log(`[getTopic] Returning latest article: "${latestArticle.title}"`);
+        return latestArticle;
+      }
+      // No articles at all - fall through to generate
     }
-
-    // Fetch from RSS and generate
-    const articles = await fetchPsychologyArticles();
-
-    if (!articles.length) {
-      console.error('No articles found in ScienceDaily RSS');
-      return null;
+    
+    // Need to generate - check lock
+    if (isGenerating) {
+      console.log('[getTopic] Generation in progress, returning latest');
+      return latestArticle;
     }
+    
+    isGenerating = true;
+    
+    try {
+      console.log(`[getTopic] Generating NEW article for ${date}...`);
+      
+      // Check Groq availability
+      const groqAvailable = await isGroqAvailable();
+      
+      if (!groqAvailable) {
+        console.log('[getTopic] Groq unavailable');
+        if (latestArticle) {
+          return latestArticle;
+        }
+        return null; // Will redirect to wait page
+      }
 
-    // Use date-based seed for deterministic selection
-    const dateSeed = new Date(date).getTime();
-    const seed = Math.floor(dateSeed / (1000 * 60 * 60 * 24));
-    const index = Math.abs(seed) % articles.length;
+      // Fetch from ScienceDaily
+      const articles = await fetchPsychologyArticles();
+      if (!articles.length) {
+        console.error('[getTopic] No ScienceDaily articles found');
+        return latestArticle;
+      }
 
-    const article = articles[index];
-    return await createTopicFromScienceDaily(article, date);
+      // Pick a fresh article - use current time for variety
+      const now = new Date();
+      const seed = now.getHours() * 60 + now.getMinutes(); // Changes each minute
+      const index = Math.abs(seed) % Math.min(articles.length, 10);
+
+      console.log(`[getTopic] Selected article ${index}: "${articles[index].title}"`);
+
+      // Create and save the new article (adds to DB, doesn't replace)
+      return await createTopicFromScienceDaily(articles[index], date);
+    } finally {
+      isGenerating = false;
+    }
   } catch (error) {
-    console.error('Error getting ScienceDaily topic:', error);
+    console.error('[getTopic] Error:', error);
+    isGenerating = false;
     return null;
   }
 }
 
 /**
- * Get archive of topics.
- * Returns from database if available, otherwise generates fallback.
+ * Get archive of all topics from database.
  */
-export async function getScienceDailyArchive(days: number = 7): Promise<DailyTopic[]> {
+export async function getScienceDailyArchive(days: number = 30): Promise<DailyTopic[]> {
   try {
-    // First try to get from database
     const dbArticles = await getAllArticles(days);
     if (dbArticles.length > 0) {
-      console.log(`Returning ${dbArticles.length} articles from database`);
+      console.log(`[getArchive] Returning ${dbArticles.length} articles from database`);
       return dbArticles;
     }
 
-    // Fallback: generate from RSS
+    // Fallback: generate placeholders from RSS
     const articles = await fetchPsychologyArticles();
-
-    if (!articles.length) {
-      return [];
-    }
+    if (!articles.length) return [];
 
     const topics: DailyTopic[] = [];
     const today = new Date();
-
-    for (let i = 0; i < days; i++) {
+    
+    for (let i = 0; i < Math.min(days, 7); i++) {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
       const dateStr = date.toISOString().split('T')[0];
-
-      const dateSeed = date.getTime();
-      const seed = Math.floor(dateSeed / (1000 * 60 * 60 * 24));
+      
+      const seed = Math.floor(date.getTime() / (1000 * 60 * 60 * 24));
       const index = Math.abs(seed) % articles.length;
 
       const article = articles[index];
-      
-      // Use fallback for archive to avoid many API calls
       const fallback = generateFallbackContent(
         article.title,
         cleanHtml(article.description),
@@ -370,13 +480,11 @@ export async function getScienceDailyArchive(days: number = 7): Promise<DailyTop
         content: fallback.content,
         date: dateStr,
         category: 'psychology',
-        links: [
-          {
-            title: 'Read Original Research on ScienceDaily',
-            url: article.link,
-            description: 'Full article with complete research details',
-          },
-        ],
+        links: [{
+          title: 'Read Original Research on ScienceDaily',
+          url: article.link,
+          description: 'Full article with complete research details',
+        }],
         keyInsights: fallback.keyInsights,
         keyConcepts: fallback.keyConcepts,
         dailyPractice: fallback.dailyPractice,
@@ -386,7 +494,7 @@ export async function getScienceDailyArchive(days: number = 7): Promise<DailyTop
 
     return topics;
   } catch (error) {
-    console.error('Error getting ScienceDaily archive:', error);
+    console.error('[getArchive] Error:', error);
     return [];
   }
 }
