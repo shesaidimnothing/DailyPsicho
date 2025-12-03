@@ -21,9 +21,14 @@ export interface ScienceDailyArticle {
   pubDate?: string;
 }
 
-const PSYCHOLOGY_RSS_URL =
-  process.env.SCIENCEDAILY_PSYCHOLOGY_RSS ||
-  'https://www.sciencedaily.com/rss/mind_brain/psychology.xml';
+// Two RSS feeds to choose from daily
+const EDUCATIONAL_PSYCHOLOGY_RSS_URL =
+  process.env.SCIENCEDAILY_EDUCATIONAL_PSYCHOLOGY_RSS ||
+  'https://www.sciencedaily.com/rss/mind_brain/educational_psychology.xml';
+
+const SOCIAL_PSYCHOLOGY_RSS_URL =
+  process.env.SCIENCEDAILY_SOCIAL_PSYCHOLOGY_RSS ||
+  'https://www.sciencedaily.com/rss/mind_brain/social_psychology.xml';
 
 // Initialize database on module load
 initDatabase().catch(console.error);
@@ -36,11 +41,27 @@ let lastGenerationTime: number | null = null;
 const MIN_GENERATION_INTERVAL = 5 * 60 * 1000;
 
 /**
+ * Select which RSS feed to use today (based on date seed for consistency)
+ */
+function selectTodaysFeed(): string {
+  const today = new Date();
+  // Use date as seed for consistent daily selection
+  const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+  // Choose between the two feeds based on date
+  return seed % 2 === 0 ? EDUCATIONAL_PSYCHOLOGY_RSS_URL : SOCIAL_PSYCHOLOGY_RSS_URL;
+}
+
+/**
  * Fetch and parse the ScienceDaily psychology RSS feed.
+ * Randomly selects between educational psychology and social psychology feeds.
  */
 export async function fetchPsychologyArticles(): Promise<ScienceDailyArticle[]> {
+  const selectedFeed = selectTodaysFeed();
+  const feedType = selectedFeed.includes('educational') ? 'educational psychology' : 'social psychology';
+  console.log(`[fetchPsychologyArticles] Using ${feedType} feed`);
+  
   try {
-    const res = await fetch(PSYCHOLOGY_RSS_URL, {
+    const res = await fetch(selectedFeed, {
       headers: {
         'User-Agent': 'DailyPsicho/1.0 (psychology/philosophy daily site)',
       },
@@ -103,10 +124,17 @@ function cleanHtml(text: string): string {
     .trim();
 }
 
+/**
+ * Calculate reading time - target 5-8 minutes.
+ * Uses a random value between 5-8 minutes for consistency.
+ */
 function estimateReadingTime(text: string): number {
-  const wordsPerMinute = 200;
-  const wordCount = text.split(/\s+/).length;
-  return Math.max(2, Math.ceil(wordCount / wordsPerMinute));
+  // Use date as seed for consistent reading time per day
+  const today = new Date();
+  const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+  // Generate a value between 5-8 based on date seed
+  const readingTime = 5 + (seed % 4); // 5, 6, 7, or 8
+  return readingTime;
 }
 
 function formatPubDate(pubDate?: string): string {
@@ -333,6 +361,9 @@ async function createTopicFromScienceDaily(
     dailyPractice = fallback.dailyPractice;
   }
 
+  const selectedFeed = selectTodaysFeed();
+  const isEducational = selectedFeed.includes('educational');
+  
   const links: ExternalLink[] = [
     {
       title: 'Read Original Research on ScienceDaily',
@@ -340,9 +371,14 @@ async function createTopicFromScienceDaily(
       description: 'Full article with complete research details and sources',
     },
     {
-      title: 'ScienceDaily Psychology News',
-      url: 'https://www.sciencedaily.com/news/mind_brain/psychology/',
-      description: 'Browse more psychology research news',
+      title: 'ScienceDaily Educational Psychology',
+      url: 'https://www.sciencedaily.com/news/mind_brain/educational_psychology/',
+      description: 'Browse more educational psychology research news',
+    },
+    {
+      title: 'ScienceDaily Social Psychology',
+      url: 'https://www.sciencedaily.com/news/mind_brain/social_psychology/',
+      description: 'Browse more social psychology research news',
     },
   ];
 
@@ -480,11 +516,19 @@ export async function getScienceDailyArchive(days: number = 30): Promise<DailyTo
         content: fallback.content,
         date: dateStr,
         category: 'psychology',
-        links: [{
-          title: 'Read Original Research on ScienceDaily',
-          url: article.link,
-          description: 'Full article with complete research details',
-        }],
+    links: [{
+      title: 'Read Original Research on ScienceDaily',
+      url: article.link,
+      description: 'Full article with complete research details',
+    }, {
+      title: 'ScienceDaily Educational Psychology',
+      url: 'https://www.sciencedaily.com/news/mind_brain/educational_psychology/',
+      description: 'Browse more educational psychology research news',
+    }, {
+      title: 'ScienceDaily Social Psychology',
+      url: 'https://www.sciencedaily.com/news/mind_brain/social_psychology/',
+      description: 'Browse more social psychology research news',
+    }],
         keyInsights: fallback.keyInsights,
         keyConcepts: fallback.keyConcepts,
         dailyPractice: fallback.dailyPractice,

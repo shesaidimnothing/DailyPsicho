@@ -1,8 +1,8 @@
 // Central configuration for article reset time
 // Change ONLY these values to update reset time across the app
 
-export const RESET_HOUR: number = 8;   // 24-hour format (0-23)
-export const RESET_MINUTE: number = 30; // Minutes (0-59)
+export const RESET_HOUR = 8;   // 24-hour format (0-23)
+export const RESET_MINUTE = 0; // Minutes (0-59)
 
 // Helper to get display string
 export function getResetTimeDisplay(): string {

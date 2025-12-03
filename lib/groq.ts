@@ -217,7 +217,7 @@ export interface ArticleGenerationResult {
 
 /**
  * Generate a full educational article about a psychology topic
- * Target: 10-15 minutes reading time (2500-3500 words)
+ * Target: 5-8 minutes reading time (1000-1600 words)
  */
 export async function generatePsychologyArticle(
   title: string,
@@ -234,7 +234,7 @@ Your writing style:
 - Scientifically accurate but not overly technical  
 - Engaging with real-world examples, analogies, and stories
 - Well-structured with clear sections
-- IMPORTANT: Write 2800-3500 words (12-15 minute read)
+- IMPORTANT: Write 1000-1600 words (5-8 minute read)
 
 FORMATTING RULES (CRITICAL):
 - Start each new paragraph on a new line
@@ -256,31 +256,31 @@ Write the article with these sections. IMPORTANT: Put a blank line between every
 
 **The Discovery**
 
-Write 4-5 paragraphs introducing the key finding. Make it engaging and set the scene. Each paragraph should be separated by a blank line.
+Write 2-3 paragraphs introducing the key finding. Make it engaging and set the scene. Each paragraph should be separated by a blank line.
 
 **Understanding the Science**
 
-Write 6-8 paragraphs explaining the psychology/neuroscience concepts. Use analogies and everyday examples. Separate each paragraph with a blank line.
+Write 3-4 paragraphs explaining the psychology/neuroscience concepts. Use analogies and everyday examples. Separate each paragraph with a blank line.
 
 **The Research in Detail**
 
-Write 3-4 paragraphs about how scientists study this and what they found. Separate paragraphs with blank lines.
+Write 2-3 paragraphs about how scientists study this and what they found. Separate paragraphs with blank lines.
 
 **Why This Matters**
 
-Write 4-5 paragraphs on broader implications for mental health and daily life. Use blank lines between paragraphs.
+Write 2-3 paragraphs on broader implications for mental health and daily life. Use blank lines between paragraphs.
 
 **The Bigger Picture**
 
-Write 3-4 paragraphs placing this in context. What questions remain? Separate with blank lines.
+Write 2 paragraphs placing this in context. What questions remain? Separate with blank lines.
 
 **Practical Applications**
 
-Write 4-5 paragraphs with concrete takeaways readers can apply. Blank lines between paragraphs.
+Write 2-3 paragraphs with concrete takeaways readers can apply. Blank lines between paragraphs.
 
 **Final Thoughts**
 
-Write 2-3 concluding paragraphs. Separate with blank lines.
+Write 1-2 concluding paragraphs. Separate with blank lines.
 
 End with:
 
@@ -289,12 +289,13 @@ End with:
 *This article was inspired by research reported on ScienceDaily. For the original research summary and sources, see the link below.*
 
 REMEMBER: 
-- 2800-3500 words total
+- 1000-1600 words total (5-8 minute read)
 - Blank line between EVERY paragraph
 - NO walls of text
 - Flowing, readable paragraphs`;
 
-  const result = await generateWithGroq(systemPrompt, userPrompt, 8000);
+  // Reduced max tokens for 5-8 minute articles (1000-1600 words ≈ 4000-5000 tokens)
+  const result = await generateWithGroq(systemPrompt, userPrompt, 5000);
 
   if (!result.success) {
     console.error('[GROQ] Article generation failed:', result.error);
