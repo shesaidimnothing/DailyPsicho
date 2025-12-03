@@ -1,20 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-
-// Reset time config - change these values to update reset time
-const RESET_HOUR = 8;   // 8 AM in 24-hour format
-const RESET_MINUTE = 0; // Minutes
-
-function getResetTimeDisplay(): string {
-  if (RESET_HOUR >= 12) {
-    const displayHour = RESET_HOUR === 12 ? 12 : RESET_HOUR - 12;
-    return `${displayHour}:${String(RESET_MINUTE).padStart(2, '0')} PM`;
-  } else {
-    const displayHour = RESET_HOUR === 0 ? 12 : RESET_HOUR;
-    return `${displayHour}:${String(RESET_MINUTE).padStart(2, '0')} AM`;
-  }
-}
+import { RESET_HOUR, RESET_MINUTE, getResetTimeDisplay } from '@/lib/reset-config';
 
 export default function CountdownTimer() {
   const [timeLeft, setTimeLeft] = useState<{ hours: number; minutes: number; seconds: number } | null>(null);
